@@ -1,0 +1,41 @@
+{
+  "name": "ucheter-tg-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon src/index.ts",
+    "build": "tsc",
+    "format": "prettier --write ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hvny/ucheter-tg-bot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hvny/ucheter-tg-bot/issues"
+  },
+  "homepage": "https://github.com/hvny/ucheter-tg-bot#readme",
+  "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^1.0.0-rc.4",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.9.5",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@grammyjs/files": "^1.2.0",
+    "chart.js": "^4.5.1",
+    "chartjs-node-canvas": "^5.0.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^1.0.0-rc.4",
+    "grammy": "^1.44.0",
+    "pg": "^8.22.0",
+    "xlsx-js-style": "^1.2.0"
+  }
+}
