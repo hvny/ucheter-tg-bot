@@ -2,12 +2,16 @@
   "name": "ucheter-tg-bot",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon --watch src --ext ts --exec tsx src/index.ts",
     "build": "tsc",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
   },
   "repository": {
     "type": "git",
@@ -20,6 +24,7 @@
   },
   "homepage": "https://github.com/hvny/ucheter-tg-bot#readme",
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^1.0.0-rc.4",
     "nodemon": "^3.1.14",
@@ -29,6 +34,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@grammyjs/conversations": "^2.1.1",
     "@grammyjs/files": "^1.2.0",
     "chart.js": "^4.5.1",
     "chartjs-node-canvas": "^5.0.0",
