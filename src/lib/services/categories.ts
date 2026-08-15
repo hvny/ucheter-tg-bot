@@ -57,3 +57,13 @@ export async function createCategory(
   const [created] = await db.insert(categories).values({ userId, name: trimmed, type }).returning();
   return created!;
 }
+
+/** Архивирует категорию (не удаляет физически — история операций остаётся рабочей). */
+export async function archiveCategory(userId: string, id: number): Promise<Category | undefined> {
+  const [archived] = await db
+    .update(categories)
+    .set({ isArchived: true })
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+    .returning();
+  return archived;
+}

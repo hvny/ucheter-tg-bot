@@ -18,5 +18,18 @@ services:
       timeout: 3s
       retries: 10
 
+  bot:
+    build:
+      context: .
+      dockerfile: DOCKERFILE
+    container_name: ucheter-bot
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN}
+      DATABASE_URL: postgres://postgres:postgres@db:5432/ucheter-bot
+
 volumes:
   pgdata:

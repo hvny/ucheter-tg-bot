@@ -11,8 +11,27 @@ if (!process.env.DATABASE_URL) {
 
 const bot = createBot(token);
 
+await bot.api.setMyCommands([
+  { command: 'menu', description: 'Меню' },
+  { command: 'add', description: 'Добавить расход или доход' },
+  { command: 'history', description: 'История операций' },
+  { command: 'stats', description: 'Статистика' },
+  { command: 'categories', description: 'Категории' },
+  { command: 'export', description: 'Экспорт в Excel' },
+  { command: 'cancel', description: 'Отменить текущий диалог' },
+]);
+
 void bot.start({
   onStart: (botInfo) => {
     console.log(`Бот @${botInfo.username} запущен`);
   },
 });
+
+async function shutdown(signal: string): Promise<void> {
+  console.log(`Получен ${signal}, останавливаю бота...`);
+  await bot.stop();
+  process.exit(0);
+}
+
+process.once('SIGINT', () => void shutdown('SIGINT'));
+process.once('SIGTERM', () => void shutdown('SIGTERM'));
