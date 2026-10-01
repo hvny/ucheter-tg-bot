@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { startExchangeRateJob } from './lib/services/exchange.js';
 import { createBot } from './bot/bot.js';
 
 const token = process.env.TG_BOT_TOKEN;
@@ -10,6 +11,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 const bot = createBot(token);
+const exchangeRateJob = startExchangeRateJob();
 
 await bot.api.setMyCommands([
   { command: 'menu', description: 'Меню' },
@@ -29,6 +31,7 @@ void bot.start({
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Получен ${signal}, останавливаю бота...`);
+  await exchangeRateJob.destroy();
   await bot.stop();
   process.exit(0);
 }

@@ -1,3 +1,4 @@
+import { registerUser, setPreferredCurrency } from '../lib/services/users.js';
 import {
   conversations,
   createConversation,
@@ -5,6 +6,7 @@ import {
 } from '@grammyjs/conversations';
 import { Bot, InlineKeyboard, type Context } from 'grammy';
 import { CALLBACKS } from '../lib/constants/index.js';
+import { editOperation, EDIT_PATTERN } from './commands/edit.js';
 import { addOperation } from './commands/add.js';
 import {
   ADD_CATEGORY_CALLBACK,
@@ -38,7 +40,7 @@ import {
 import { MENU_TEXT, menuKeyboard } from './commands/menu.js';
 import { handleStart } from './commands/start.js';
 import {
-  DEFAULT_STATS_STATE,
+  getInitialStatsState,
   STATS_CLOSE_CALLBACK,
   STATS_PATTERN,
   decodeStatsState,
@@ -56,6 +58,12 @@ export function createBot(token: string): Bot<BotContext> {
   bot.use(conversations());
   bot.use(createConversation(addOperation));
   bot.use(createConversation(addCategory));
+  bot.use(createConversation(editOperation));
+
+  bot.callbackQuery(EDIT_PATTERN, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.enter('editOperation');
+  });
 
   bot.command('start', handleStart);
 
@@ -75,7 +83,10 @@ export function createBot(token: string): Bot<BotContext> {
 
   bot.command('stats', async (ctx) => {
     if (!ctx.from) return;
-    const result = await renderStats(String(ctx.from.id), DEFAULT_STATS_STATE);
+    const result = await renderStats(
+      String(ctx.from.id),
+      await getInitialStatsState(String(ctx.from.id)),
+    );
     await sendStats(ctx, result);
   });
 
@@ -137,7 +148,10 @@ export function createBot(token: string): Bot<BotContext> {
   bot.callbackQuery(CALLBACKS.menuStats, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
-    const result = await renderStats(String(ctx.from.id), DEFAULT_STATS_STATE);
+    const result = await renderStats(
+      String(ctx.from.id),
+      await getInitialStatsState(String(ctx.from.id)),
+    );
     await replaceWithStats(ctx, result);
   });
 
@@ -145,6 +159,10 @@ export function createBot(token: string): Bot<BotContext> {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
     const state = decodeStatsState(ctx.match as RegExpMatchArray);
+    if (state.converted) {
+      await registerUser(String(ctx.from.id), ctx.from.username);
+      await setPreferredCurrency(String(ctx.from.id), state.currency);
+    }
     const result = await renderStats(String(ctx.from.id), state);
     await updateStats(ctx, result);
   });

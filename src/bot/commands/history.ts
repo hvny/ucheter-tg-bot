@@ -19,7 +19,12 @@ export interface HistoryState {
   page: number;
 }
 
-export const DEFAULT_HISTORY_STATE: HistoryState = { type: 'all', period: 'month', categoryId: 0, page: 0 };
+export const DEFAULT_HISTORY_STATE: HistoryState = {
+  type: 'all',
+  period: 'month',
+  categoryId: 0,
+  page: 0,
+};
 
 const TYPE_CODES: Record<TypeFilter, string> = { all: 'a', expense: 'e', income: 'i' };
 const TYPE_FROM_CODE: Record<string, TypeFilter> = { a: 'all', e: 'expense', i: 'income' };
@@ -70,7 +75,7 @@ export async function renderHistory(
     ? items.map((t) => {
         const sign = t.type === 'expense' ? '−' : '+';
         const comment = t.comment ? ` — ${t.comment}` : '';
-        return `${OPERATION_TYPE_EMOJI[t.type]} ${sign}${formatAmount(t.amount)} ₽ · ${t.categoryName ?? 'Без категории'}${comment}\n   ${formatDate(t.createdAt)}`;
+        return `${OPERATION_TYPE_EMOJI[t.type]} ${sign}${formatAmount(t.amount)} ${t.currency} · ${t.categoryName ?? 'Без категории'}${comment}\n   ${formatDate(t.createdAt)}`;
       })
     : ['Операций не найдено.'];
 
@@ -84,9 +89,17 @@ export async function renderHistory(
   ].join('\n');
 
   const keyboard = new InlineKeyboard();
+  for (const item of items)
+    keyboard
+      .text(
+        `✏️ ${formatAmount(item.amount)} ${item.currency} · ${item.categoryName}`,
+        `edit:${item.id}`,
+      )
+      .row();
 
   (['all', 'expense', 'income'] as const).forEach((type) => {
-    const label = (type === state.type ? '✓ ' : '') + (type === 'all' ? 'Все' : OPERATION_TYPE_LABELS[type]);
+    const label =
+      (type === state.type ? '✓ ' : '') + (type === 'all' ? 'Все' : OPERATION_TYPE_LABELS[type]);
     keyboard.text(label, encodeHistoryState({ ...state, type, categoryId: 0, page: 0 }));
   });
   keyboard.row();
@@ -98,12 +111,16 @@ export async function renderHistory(
   keyboard.row();
 
   keyboard
-    .text(`🗂 ${categoryLabel}`, `hcat:${TYPE_CODES[state.type]}:${PERIOD_CODES[state.period]}:${state.categoryId}:${state.page}`)
+    .text(
+      `🗂 ${categoryLabel}`,
+      `hcat:${TYPE_CODES[state.type]}:${PERIOD_CODES[state.period]}:${state.categoryId}:${state.page}`,
+    )
     .row();
 
   if (state.page > 0) keyboard.text('◀️', encodeHistoryState({ ...state, page: state.page - 1 }));
   keyboard.text(`${state.page + 1}/${totalPages}`, HISTORY_NOOP_CALLBACK);
-  if (state.page + 1 < totalPages) keyboard.text('▶️', encodeHistoryState({ ...state, page: state.page + 1 }));
+  if (state.page + 1 < totalPages)
+    keyboard.text('▶️', encodeHistoryState({ ...state, page: state.page + 1 }));
   keyboard.row();
 
   keyboard.text('❌ Закрыть', HISTORY_CLOSE_CALLBACK);
@@ -116,12 +133,18 @@ export async function renderHistoryCategoryMenu(
   userId: string,
   state: HistoryState,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
-  const list = state.type === 'all' ? await getActiveCategories(userId) : await getActiveCategories(userId, state.type);
+  const list =
+    state.type === 'all'
+      ? await getActiveCategories(userId)
+      : await getActiveCategories(userId, state.type);
 
   const keyboard = new InlineKeyboard();
   keyboard.text('Все категории', encodeHistoryState({ ...state, categoryId: 0, page: 0 })).row();
   list.forEach((category, i) => {
-    keyboard.text(category.name, encodeHistoryState({ ...state, categoryId: category.id, page: 0 }));
+    keyboard.text(
+      category.name,
+      encodeHistoryState({ ...state, categoryId: category.id, page: 0 }),
+    );
     if (i % 2 === 1) keyboard.row();
   });
   if (list.length % 2 === 1) keyboard.row();

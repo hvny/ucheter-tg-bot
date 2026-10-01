@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
-import { categories, users, type User } from '../../db/schema.js';
+import { categories, users, type Currency, type User } from '../../db/schema.js';
 import { DEFAULT_CATEGORIES } from '../constants/index.js';
 
 /**
@@ -35,4 +35,16 @@ export async function registerUser(
   });
 
   return { user, isNew: true };
+}
+
+export async function getPreferredCurrency(userId: string): Promise<Currency> {
+  const [user] = await db
+    .select({ currency: users.preferredCurrency })
+    .from(users)
+    .where(eq(users.id, userId));
+  return user?.currency ?? 'RUB';
+}
+
+export async function setPreferredCurrency(userId: string, currency: Currency): Promise<void> {
+  await db.update(users).set({ preferredCurrency: currency }).where(eq(users.id, userId));
 }

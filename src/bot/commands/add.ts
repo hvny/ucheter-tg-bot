@@ -1,6 +1,6 @@
 import type { Conversation } from '@grammyjs/conversations';
 import type { Context } from 'grammy';
-import type { OperationType } from '../../db/schema.js';
+import type { Currency, OperationType } from '../../db/schema.js';
 import {
   CALLBACKS,
   MAX_CATEGORY_NAME_LENGTH,
@@ -17,7 +17,7 @@ import { registerUser } from '../../lib/services/users.js';
 import { formatDate } from '../../lib/utils/date.js';
 import { formatAmount, parseAmount } from '../../lib/utils/money.js';
 import {
-  cancelFlow,
+  currencyKeyboard,
   cancelKeyboard,
   categoriesKeyboard,
   editPrompt,
@@ -79,13 +79,17 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   } else {
     categoryId = Number(categoryResult.data.split(':')[1]);
     const category = await conversation.external(() => getCategoryById(userId, categoryId));
-    if (!category) {
+    if (!category || category.type !== type || category.isArchived) {
       await editPrompt(categoryResult.ctx, ref, 'Категория не найдена. Попробуй ещё раз: /add');
       await conversation.halt();
       return;
     }
     categoryName = category.name;
   }
+
+  await editPrompt(ctx, ref, 'Выбери валюту операции:', currencyKeyboard());
+  const currencyResult = await waitCallback(conversation, ref, /^currency:(RUB|USD|EUR|RSD)$/);
+  const currency = currencyResult.data.split(':')[1] as Currency;
 
   // Шаг 3: сумма
   await editPrompt(
@@ -114,7 +118,7 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   await editPrompt(
     ctx,
     ref,
-    `${typeLabel} · ${categoryName} · ${formatAmount(amount)} ₽\n\nДобавь комментарий или пропусти:`,
+    `${typeLabel} · ${categoryName} · ${formatAmount(amount)} ${currency}\n\nДобавь комментарий или пропусти:`,
     skipKeyboard(),
   );
   const commentResult = await waitTextOrCallback(conversation, ref, /^skip$/);
@@ -123,13 +127,20 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
 
   // Шаг 5: сохранение и подтверждение
   const transaction = await conversation.external(() =>
-    createTransaction({ userId, categoryId, amount, type, ...(comment ? { comment } : {}) }),
+    createTransaction({
+      userId,
+      categoryId,
+      amount,
+      currency,
+      type,
+      ...(comment ? { comment } : {}),
+    }),
   );
 
   const lines = [
     `✅ ${typeLabel} добавлен`,
     '',
-    `💰 ${formatAmount(amount)} ₽ — ${categoryName}`,
+    `💰 ${formatAmount(amount)} ${currency} — ${categoryName}`,
     `📅 ${formatDate(transaction.createdAt)}`,
   ];
   if (comment) lines.push(`💬 ${comment}`);

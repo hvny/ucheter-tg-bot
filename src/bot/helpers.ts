@@ -1,6 +1,6 @@
 import type { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard, type Context } from 'grammy';
-import type { Category } from '../db/schema.js';
+import { currencyType, type Category } from '../db/schema.js';
 import { BUTTONS, CALLBACKS } from '../lib/constants/index.js';
 
 /** Ссылка на "экран" диалога — единственное сообщение бота, которое редактируется на каждом шаге. */
@@ -100,6 +100,11 @@ export async function waitCallback(
     const ctx = await conversation.wait();
     const data = ctx.callbackQuery?.data;
     if (data) {
+      const message = ctx.callbackQuery?.message;
+      if (!message || message.chat.id !== ref.chatId || message.message_id !== ref.messageId) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        continue;
+      }
       await ctx.answerCallbackQuery().catch(() => {});
       if (data === CALLBACKS.cancel) await cancelFlow(conversation, ctx, ref);
       if (pattern.test(data)) return { ctx, data };
@@ -129,6 +134,11 @@ export async function waitTextOrCallback(
     const ctx = await conversation.wait();
     const data = ctx.callbackQuery?.data;
     if (data) {
+      const message = ctx.callbackQuery?.message;
+      if (!message || message.chat.id !== ref.chatId || message.message_id !== ref.messageId) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        continue;
+      }
       await ctx.answerCallbackQuery().catch(() => {});
       if (data === CALLBACKS.cancel) await cancelFlow(conversation, ctx, ref);
       if (allowedCallbacks?.test(data)) return { kind: 'callback', data, ctx };
@@ -151,4 +161,10 @@ export async function waitText(
   const result = await waitTextOrCallback(conversation, ref);
   // без allowedCallbacks сюда может прийти только текст
   return { text: (result as { kind: 'text'; text: string; ctx: Context }).text, ctx: result.ctx };
+}
+
+export function currencyKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  for (const currency of currencyType.enumValues) keyboard.text(currency, `currency:${currency}`);
+  return keyboard.row().text(BUTTONS.cancel, CALLBACKS.cancel);
 }

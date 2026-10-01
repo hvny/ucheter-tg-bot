@@ -36,17 +36,18 @@ export async function buildExportWorkbook(userId: string, period: Period): Promi
   const from = getPeriodStart(period);
   const items = await listAllTransactions(userId, from ? { from } : {});
 
-  const header = ['Дата', 'Тип', 'Категория', 'Сумма', 'Комментарий'];
+  const header = ['Дата', 'Тип', 'Категория', 'Сумма', 'Валюта', 'Комментарий'];
   const rows = items.map((t) => [
     formatDate(t.createdAt),
     OPERATION_TYPE_LABELS[t.type],
     t.categoryName ?? 'Без категории',
     Number(t.amount) * (t.type === 'expense' ? -1 : 1),
+    t.currency,
     t.comment ?? '',
   ]);
 
   const sheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
-  sheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 12 }, { wch: 32 }];
+  sheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 32 }];
   for (let col = 0; col < header.length; col++) {
     const address = XLSX.utils.encode_cell({ r: 0, c: col });
     const cell = sheet[address];
