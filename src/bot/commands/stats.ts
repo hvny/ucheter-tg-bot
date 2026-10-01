@@ -1,8 +1,6 @@
 import { logTelegramFailure } from '../logging.js';
 import { sectionKeyboard } from './menu.js';
-import { getLatestRates } from '../../lib/services/exchange.js';
 import { getPreferredCurrency } from '../../lib/services/users.js';
-import { formatDate } from '../../lib/utils/date.js';
 import { InlineKeyboard, InputFile, type Context } from 'grammy';
 import { currencyType, type Currency, type OperationType } from '../../db/schema.js';
 import { BUTTONS, CALLBACKS, OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
@@ -64,16 +62,18 @@ export async function renderStats(
   fromMenu = true,
 ): Promise<StatsResult> {
   const from = getPeriodStart(state.period);
-  const snapshot = state.converted ? await getLatestRates() : undefined;
-  const data =
-    state.converted && snapshot
-      ? await getConvertedStats(userId, state.type, state.currency, snapshot.rates, from)
-      : {
-          summary: await getSummary(userId, from, state.currency),
-          breakdown: await getCategoryBreakdown(userId, state.type, from, state.currency),
-        };
+  const data = state.converted
+    ? await getConvertedStats(userId, state.type, state.currency, from)
+    : {
+        summary: await getSummary(userId, from, state.currency),
+        breakdown: await getCategoryBreakdown(userId, state.type, from, state.currency),
+        missingRates: 0,
+        estimatedRates: 0,
+      };
   const { summary } = data;
-  const breakdown = state.converted && !snapshot ? [] : data.breakdown;
+  // Never present an incomplete total as an overall balance.
+  const incomplete = data.missingRates > 0;
+  const breakdown = incomplete ? [] : data.breakdown;
 
   const balance = summary.income - summary.expense;
   const balanceSign = balance > 0 ? '+' : '';
@@ -86,14 +86,19 @@ export async function renderStats(
     `💰 Баланс: ${balanceSign}${formatAmount(balance)} ${state.currency}`,
   ];
 
-  if (state.converted && snapshot) {
-    lines.push('', `По курсам от ${formatDate(snapshot.rateAt)} · ExchangeRate-API`);
-    if (Date.now() > snapshot.nextUpdateAt.getTime())
-      lines.push('Обновление курсов задерживается; использованы последние сохранённые.');
+  if (state.converted && !incomplete) {
+    lines.push('', 'По закреплённым курсам операций · ExchangeRate-API');
+    if (data.estimatedRates)
+      lines.push(
+        `Приблизительный курс использован для ${data.estimatedRates} операций: курс на их дату отсутствовал.`,
+      );
   }
-  if (state.converted && !snapshot) {
+  if (incomplete) {
     lines.splice(2);
-    lines.push('Курсы ещё не загружены. Общий итог пока недоступен.', 'Суммы без пересчёта:');
+    lines.push(
+      `Для ${data.missingRates} операций курс ещё не закреплён. Общий итог пока недоступен.`,
+      'Суммы без пересчёта:',
+    );
     for (const currency of currencyType.enumValues) {
       const original = await getSummary(userId, from, currency);
       if (original.income || original.expense)
@@ -109,7 +114,7 @@ export async function renderStats(
     for (const item of breakdown) {
       lines.push(`• ${item.categoryName}: ${formatAmount(item.total)} ${state.currency}`);
     }
-  } else if (!state.converted || snapshot) {
+  } else if (!incomplete) {
     lines.push(
       '',
       `Нет операций типа «${OPERATION_TYPE_LABELS[state.type].toLowerCase()}» за этот период.`,

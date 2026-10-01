@@ -70,9 +70,36 @@ test('network and HTTP failures do not expose API key', async () => {
 test('converted totals combine currencies while keeping income and expense separate', async () => {
   const original = db.select;
   const rows = [
-    { categoryId: 1, categoryName: 'Еда', type: 'expense', currency: 'RSD', total: 1080 },
-    { categoryId: 1, categoryName: 'Еда', type: 'expense', currency: 'EUR', total: 1 },
-    { categoryId: 2, categoryName: 'Зарплата', type: 'income', currency: 'USD', total: 100 },
+    {
+      categoryId: 1,
+      categoryName: 'Еда',
+      type: 'expense',
+      currency: 'RSD',
+      total: 1080,
+      rates,
+      rateEstimated: false,
+      count: 1,
+    },
+    {
+      categoryId: 1,
+      categoryName: 'Еда',
+      type: 'expense',
+      currency: 'EUR',
+      total: 1,
+      rates,
+      rateEstimated: false,
+      count: 1,
+    },
+    {
+      categoryId: 2,
+      categoryName: 'Зарплата',
+      type: 'income',
+      currency: 'USD',
+      total: 100,
+      rates,
+      rateEstimated: false,
+      count: 1,
+    },
   ];
   const query = {
     from: () => query,
@@ -82,9 +109,109 @@ test('converted totals combine currencies while keeping income and expense separ
   };
   db.select = (() => query) as unknown as typeof db.select;
   try {
-    const result = await getConvertedStats('42', 'expense', 'EUR', rates);
+    const result = await getConvertedStats('42', 'expense', 'EUR');
     assert.deepEqual(result.summary, { income: 90, expense: 10 });
     assert.deepEqual(result.breakdown, [{ categoryId: 1, categoryName: 'Еда', total: 10 }]);
+  } finally {
+    db.select = original;
+  }
+});
+
+test('different pinned rates remain separate and future rate refresh does not change totals', async () => {
+  const original = db.select;
+  const oldRates = { ...rates };
+  const rows = [
+    {
+      categoryId: 1,
+      categoryName: 'Еда',
+      type: 'expense',
+      currency: 'RSD',
+      total: 1080,
+      rates: oldRates,
+      rateEstimated: false,
+      count: 1,
+    },
+    {
+      categoryId: 1,
+      categoryName: 'Еда',
+      type: 'expense',
+      currency: 'RSD',
+      total: 1080,
+      rates: { ...rates, EUR: 1.8 },
+      rateEstimated: false,
+      count: 1,
+    },
+  ];
+  const query = {
+    from: () => query,
+    leftJoin: () => query,
+    where: () => query,
+    groupBy: async (...columns: unknown[]) => {
+      assert.ok(
+        columns.some((c) => c && typeof c === 'object' && 'name' in c && c.name === 'rate_at'),
+      );
+      return rows;
+    },
+  };
+  db.select = (() => query) as unknown as typeof db.select;
+  try {
+    const before = await getConvertedStats('42', 'expense', 'EUR');
+    assert.equal(before.summary.expense, 27);
+    const latestRates = { ...rates, EUR: 3.6 };
+    assert.equal(convertAmount(1080, 'RSD', 'EUR', latestRates), 36);
+    assert.deepEqual(await getConvertedStats('42', 'expense', 'EUR'), before);
+    assert.equal((await getConvertedStats('42', 'expense', 'USD')).summary.expense, 20);
+  } finally {
+    db.select = original;
+  }
+});
+
+test('missing rates are counted and identity conversions still work', async () => {
+  const original = db.select;
+  const rows = [
+    {
+      categoryId: 1,
+      categoryName: 'Еда',
+      type: 'expense',
+      currency: 'RSD',
+      total: 100,
+      rates: null,
+      rateEstimated: false,
+      count: 2,
+    },
+    {
+      categoryId: 2,
+      categoryName: 'Кафе',
+      type: 'expense',
+      currency: 'EUR',
+      total: 5,
+      rates: null,
+      rateEstimated: false,
+      count: 1,
+    },
+    {
+      categoryId: 1,
+      categoryName: 'Еда',
+      type: 'expense',
+      currency: 'USD',
+      total: 10,
+      rates,
+      rateEstimated: true,
+      count: 3,
+    },
+  ];
+  const query = {
+    from: () => query,
+    leftJoin: () => query,
+    where: () => query,
+    groupBy: async () => rows,
+  };
+  db.select = (() => query) as unknown as typeof db.select;
+  try {
+    const result = await getConvertedStats('42', 'expense', 'EUR');
+    assert.equal(result.missingRates, 2);
+    assert.equal(result.estimatedRates, 3);
+    assert.equal(result.summary.expense, 14);
   } finally {
     db.select = original;
   }

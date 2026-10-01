@@ -32,6 +32,15 @@ export const categories = pgTable('categories', {
   isArchived: boolean('is_archived').notNull().default(false),
 });
 
+/** One complete USD-based snapshot per provider publication time. */
+export const exchangeRates = pgTable('exchange_rates', {
+  rateAt: timestamp('rate_at', { withTimezone: true }).primaryKey(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  nextUpdateAt: timestamp('next_update_at', { withTimezone: true }).notNull(),
+  baseCurrency: currencyType('base_currency').notNull().default('USD'),
+  rates: jsonb('rates').$type<Record<Currency, number>>().notNull(),
+});
+
 export const transactions = pgTable('transactions', {
   id: serial('id').primaryKey(),
   userId: text('user_id')
@@ -44,6 +53,8 @@ export const transactions = pgTable('transactions', {
   amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
   type: operationType('type').notNull(),
   comment: text('comment'),
+  rateAt: timestamp('rate_at', { withTimezone: true }).references(() => exchangeRates.rateAt),
+  rateEstimated: boolean('rate_estimated').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -52,12 +63,3 @@ export type Category = typeof categories.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type OperationType = (typeof operationType.enumValues)[number];
-
-/** One complete USD-based snapshot per provider publication time. */
-export const exchangeRates = pgTable('exchange_rates', {
-  rateAt: timestamp('rate_at', { withTimezone: true }).primaryKey(),
-  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
-  nextUpdateAt: timestamp('next_update_at', { withTimezone: true }).notNull(),
-  baseCurrency: currencyType('base_currency').notNull().default('USD'),
-  rates: jsonb('rates').$type<Record<Currency, number>>().notNull(),
-});

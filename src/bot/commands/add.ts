@@ -143,6 +143,9 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
     `💰 ${formatAmount(amount)} ${currency} — ${categoryName}`,
     `📅 ${formatDate(transaction.createdAt)}`,
   ];
+  if (!transaction.rateAt)
+    lines.push('Курс пока недоступен: общий пересчёт появится после загрузки курсов.');
+  else if (transaction.rateEstimated) lines.push('Для пересчёта закреплён приблизительный курс.');
   if (comment) lines.push(`💬 ${comment}`);
   await editPrompt(commentResult.ctx, ref, lines.join('\n'));
 }

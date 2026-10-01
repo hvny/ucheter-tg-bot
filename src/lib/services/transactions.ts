@@ -1,8 +1,10 @@
+import { getRatesForDate } from './exchange.js';
 import { convertAmount } from '../utils/exchange.js';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import {
   categories,
+  exchangeRates,
   transactions,
   type Currency,
   type OperationType,
@@ -19,9 +21,16 @@ export interface CreateTransactionInput {
 }
 
 export async function createTransaction(input: CreateTransactionInput): Promise<Transaction> {
+  const createdAt = new Date();
+  const snapshot = await getRatesForDate(createdAt);
   const [created] = await db
     .insert(transactions)
     .values({
+      createdAt,
+      rateAt: snapshot?.rateAt ?? null,
+      rateEstimated: snapshot
+        ? snapshot.rateAt > createdAt || snapshot.nextUpdateAt <= createdAt
+        : false,
       userId: input.userId,
       categoryId: input.categoryId,
       amount: input.amount.toFixed(2),
@@ -73,6 +82,8 @@ export async function listTransactions(
         currency: transactions.currency,
         type: transactions.type,
         comment: transactions.comment,
+        rateAt: transactions.rateAt,
+        rateEstimated: transactions.rateEstimated,
         createdAt: transactions.createdAt,
         categoryName: categories.name,
       })
@@ -107,6 +118,8 @@ export async function listAllTransactions(
       currency: transactions.currency,
       type: transactions.type,
       comment: transactions.comment,
+      rateAt: transactions.rateAt,
+      rateEstimated: transactions.rateEstimated,
       createdAt: transactions.createdAt,
       categoryName: categories.name,
     })
@@ -221,30 +234,56 @@ export async function updateTransaction(
   return updated;
 }
 
-/** Aggregate first, then convert each currency using one complete snapshot. */
+/** Aggregate only operations sharing the same pinned snapshot before conversion. */
 export async function getConvertedStats(
   userId: string,
   type: OperationType,
   currency: Currency,
-  rates: Record<Currency, number>,
   from?: Date,
-): Promise<{ summary: PeriodSummary; breakdown: CategoryTotal[] }> {
+): Promise<{
+  summary: PeriodSummary;
+  breakdown: CategoryTotal[];
+  missingRates: number;
+  estimatedRates: number;
+}> {
   const rows = await db
     .select({
       categoryId: transactions.categoryId,
       categoryName: categories.name,
       type: transactions.type,
       currency: transactions.currency,
+      rates: exchangeRates.rates,
+      rateEstimated: transactions.rateEstimated,
+      count: sql<number>`count(*)`.mapWith(Number),
       total: sql<number>`sum(${transactions.amount})`.mapWith(Number),
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .leftJoin(exchangeRates, eq(transactions.rateAt, exchangeRates.rateAt))
     .where(transactionFilterConditions(userId, { ...(from ? { from } : {}) }))
-    .groupBy(transactions.categoryId, categories.name, transactions.type, transactions.currency);
+    .groupBy(
+      transactions.categoryId,
+      categories.name,
+      transactions.type,
+      transactions.currency,
+      transactions.rateAt,
+      transactions.rateEstimated,
+      exchangeRates.rates,
+    );
   const summary: PeriodSummary = { income: 0, expense: 0 };
   const totals = new Map<number, CategoryTotal>();
+  let missingRates = 0;
+  let estimatedRates = 0;
   for (const row of rows) {
-    const total = convertAmount(row.total, row.currency, currency, rates);
+    if (!row.rates && row.currency !== currency) {
+      missingRates += row.count;
+      continue;
+    }
+    if (row.rateEstimated && row.currency !== currency) estimatedRates += row.count;
+    const total =
+      row.currency === currency
+        ? row.total
+        : convertAmount(row.total, row.currency, currency, row.rates!);
     summary[row.type] += total;
     if (row.type !== type) continue;
     const category = totals.get(row.categoryId) ?? {
@@ -255,5 +294,10 @@ export async function getConvertedStats(
     category.total += total;
     totals.set(row.categoryId, category);
   }
-  return { summary, breakdown: [...totals.values()].sort((a, b) => b.total - a.total) };
+  return {
+    summary,
+    breakdown: [...totals.values()].sort((a, b) => b.total - a.total),
+    missingRates,
+    estimatedRates,
+  };
 }
