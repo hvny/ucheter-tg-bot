@@ -1,5 +1,16 @@
 import { currencyType, type Currency } from '../../db/schema.js';
 
+export class ExchangeRateError extends Error {
+  override name = 'ExchangeRateError';
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
 export interface RateSnapshot {
   rateAt: Date;
   nextUpdateAt: Date;
@@ -64,15 +75,38 @@ export async function fetchRateSnapshot(
       `https://v6.exchangerate-api.com/v6/${encodeURIComponent(key)}/latest/USD`,
       { signal: AbortSignal.timeout(10_000) },
     );
-  } catch {
-    throw new Error('Не удалось подключиться к API курсов');
+  } catch (error) {
+    const code =
+      error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)
+        ? 'timeout'
+        : 'network';
+    throw new ExchangeRateError(code, 'Не удалось подключиться к API курсов');
   }
-  if (!response.ok) throw new Error(`API курсов: HTTP ${response.status}`);
+  if (!response.ok)
+    throw new ExchangeRateError('http', `API курсов: HTTP ${response.status}`, response.status);
   let data: unknown;
   try {
     data = await response.json();
   } catch {
-    throw new Error('API курсов вернул некорректный JSON');
+    throw new ExchangeRateError('invalid-response', 'API курсов вернул некорректный JSON');
   }
-  return parseRateSnapshot(data);
+  if (data && typeof data === 'object' && (data as Record<string, unknown>).result === 'error') {
+    const code = (data as Record<string, unknown>)['error-type'];
+    const known = [
+      'invalid-key',
+      'inactive-account',
+      'quota-reached',
+      'unsupported-code',
+      'malformed-request',
+    ];
+    throw new ExchangeRateError(
+      typeof code === 'string' && known.includes(code) ? code : 'api-error',
+      'API курсов вернул ошибку',
+    );
+  }
+  try {
+    return parseRateSnapshot(data);
+  } catch {
+    throw new ExchangeRateError('invalid-response', 'API курсов вернул некорректные курсы');
+  }
 }

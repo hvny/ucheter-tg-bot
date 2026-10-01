@@ -1,7 +1,12 @@
 import type { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard, type Context } from 'grammy';
 import type { Currency, OperationType } from '../../db/schema.js';
-import { MAX_COMMENT_LENGTH, OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
+import {
+  BUTTONS,
+  CALLBACKS,
+  MAX_COMMENT_LENGTH,
+  OPERATION_TYPE_LABELS,
+} from '../../lib/constants/index.js';
 import { getActiveCategories, getCategoryById } from '../../lib/services/categories.js';
 import { getTransactionById, updateTransaction } from '../../lib/services/transactions.js';
 import { formatAmount, parseAmount } from '../../lib/utils/money.js';
@@ -47,7 +52,9 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
       .text('Комментарий', 'ef:comment')
       .row()
       .text('✅ Сохранить', 'ef:save')
-      .text('❌ Отмена', 'cancel');
+      .text('❌ Отмена', 'cancel')
+      .row()
+      .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
     await editPrompt(
       ctx,
       ref,
@@ -76,7 +83,10 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
         updated
           ? `✅ Операция обновлена\n${OPERATION_TYPE_LABELS[type]} · ${formatAmount(amount)} ${currency} · ${categoryName}${comment ? `\n💬 ${comment}` : ''}`
           : 'Не удалось сохранить: операция или категория не найдена. Открой /history.',
-        new InlineKeyboard().text('📜 История', 'menu:history'),
+        new InlineKeyboard()
+          .text('📜 История', 'menu:history')
+          .row()
+          .text(BUTTONS.backToMenu, CALLBACKS.menuBack),
       );
       return;
     }
@@ -109,7 +119,9 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
         new InlineKeyboard()
           .text('Удалить комментарий', 'ef:clear')
           .row()
-          .text('❌ Отмена', 'cancel'),
+          .text('❌ Отмена', 'cancel')
+          .row()
+          .text(BUTTONS.backToMenu, CALLBACKS.menuBack),
       );
       const result = await waitTextOrCallback(conversation, ref, /^ef:clear$/);
       comment = result.kind === 'text' ? result.text.slice(0, MAX_COMMENT_LENGTH) : '';
@@ -140,7 +152,7 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
       }
       const categories = new InlineKeyboard();
       for (const category of list) categories.text(category.name, `ec:${category.id}`).row();
-      categories.text('❌ Отмена', 'cancel');
+      categories.text('❌ Отмена', 'cancel').row().text(BUTTONS.backToMenu, CALLBACKS.menuBack);
       await editPrompt(ctx, ref, 'Выбери категорию:', categories);
       for (;;) {
         const selected = await waitCallback(conversation, ref, /^ec:\d+$/);

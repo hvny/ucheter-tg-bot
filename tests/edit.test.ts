@@ -98,3 +98,10 @@ test('changing type requires a matching category before save', async () => {
   await editOperation(f.conversation, f.ctx);
   assert.ok(f.screens.at(-1)?.includes('Доход · 10 RUB · Зарплата'));
 });
+
+test('back to menu after editing discards unsaved changes', async () => {
+  const f = fixture(['ef:amount', 'text:250', 'menu:back'], [item, { name: 'Еда' }]);
+  await assert.rejects(editOperation(f.conversation, f.ctx), /cancelled/);
+  assert.equal(f.calls(), 2);
+  assert.equal(f.screens.at(-1), '📋 Меню — что делаем?');
+});

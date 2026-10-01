@@ -1,3 +1,6 @@
+import { logger } from '../lib/logging/logger.js';
+import { updateKind } from './logging.js';
+import { logTelegramFailure } from './logging.js';
 import { registerUser, setPreferredCurrency } from '../lib/services/users.js';
 import {
   conversations,
@@ -37,7 +40,13 @@ import {
   renderExportMenu,
   sendExport,
 } from './commands/export.js';
-import { MENU_TEXT, menuKeyboard } from './commands/menu.js';
+import {
+  MENU_TEXT,
+  menuKeyboard,
+  returnToMenu,
+  backToMenuKeyboard,
+  cameFromMenu,
+} from './commands/menu.js';
 import { handleStart } from './commands/start.js';
 import {
   getInitialStatsState,
@@ -55,6 +64,33 @@ export type BotContext = ConversationFlavor<Context>;
 export function createBot(token: string): Bot<BotContext> {
   const bot = new Bot<BotContext>(token);
 
+  bot.use(async (ctx, next) => {
+    const started = performance.now();
+    const fields = { updateId: ctx.update.update_id, action: updateKind(ctx) };
+    logger.debug({ ...fields, event: 'bot.update.received' }, 'Получено обновление');
+    try {
+      await next();
+      logger.info(
+        {
+          ...fields,
+          event: 'bot.update.completed',
+          durationMs: Math.round(performance.now() - started),
+        },
+        'Обновление обработано',
+      );
+    } catch (error) {
+      logger.error(
+        {
+          ...fields,
+          event: 'bot.update.failed',
+          durationMs: Math.round(performance.now() - started),
+          err: error,
+        },
+        'Ошибка обработки обновления',
+      );
+      throw error;
+    }
+  });
   bot.use(conversations());
   bot.use(createConversation(addOperation));
   bot.use(createConversation(addCategory));
@@ -77,7 +113,11 @@ export function createBot(token: string): Bot<BotContext> {
 
   bot.command('history', async (ctx) => {
     if (!ctx.from) return;
-    const { text, keyboard } = await renderHistory(String(ctx.from.id), DEFAULT_HISTORY_STATE);
+    const { text, keyboard } = await renderHistory(
+      String(ctx.from.id),
+      DEFAULT_HISTORY_STATE,
+      cameFromMenu(ctx),
+    );
     await ctx.reply(text, { reply_markup: keyboard });
   });
 
@@ -86,18 +126,19 @@ export function createBot(token: string): Bot<BotContext> {
     const result = await renderStats(
       String(ctx.from.id),
       await getInitialStatsState(String(ctx.from.id)),
+      cameFromMenu(ctx),
     );
     await sendStats(ctx, result);
   });
 
   bot.command('export', async (ctx) => {
-    const { text, keyboard } = renderExportMenu();
+    const { text, keyboard } = renderExportMenu(cameFromMenu(ctx));
     await ctx.reply(text, { reply_markup: keyboard });
   });
 
   bot.command('categories', async (ctx) => {
     if (!ctx.from) return;
-    const { text, keyboard } = await renderCategories(String(ctx.from.id));
+    const { text, keyboard } = await renderCategories(String(ctx.from.id), cameFromMenu(ctx));
     await ctx.reply(text, { reply_markup: keyboard });
   });
 
@@ -105,6 +146,12 @@ export function createBot(token: string): Bot<BotContext> {
   bot.command('cancel', async (ctx) => {
     await ctx.conversation.exitAll();
     await ctx.reply('Сейчас нет активного диалога. Меню: /menu');
+  });
+
+  bot.callbackQuery(CALLBACKS.menuBack, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.exitAll();
+    await returnToMenu(ctx);
   });
 
   // кнопки меню
@@ -116,24 +163,38 @@ export function createBot(token: string): Bot<BotContext> {
   bot.callbackQuery(CALLBACKS.menuHistory, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
-    const { text, keyboard } = await renderHistory(String(ctx.from.id), DEFAULT_HISTORY_STATE);
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = await renderHistory(
+      String(ctx.from.id),
+      DEFAULT_HISTORY_STATE,
+      cameFromMenu(ctx),
+    );
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(HISTORY_PATTERN, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
     const state = decodeHistoryState(ctx.match as RegExpMatchArray);
-    const { text, keyboard } = await renderHistory(String(ctx.from.id), state);
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = await renderHistory(String(ctx.from.id), state, cameFromMenu(ctx));
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(HISTORY_CATEGORY_MENU_PATTERN, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
     const state = decodeHistoryState(ctx.match as RegExpMatchArray);
-    const { text, keyboard } = await renderHistoryCategoryMenu(String(ctx.from.id), state);
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = await renderHistoryCategoryMenu(
+      String(ctx.from.id),
+      state,
+      cameFromMenu(ctx),
+    );
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(HISTORY_NOOP_CALLBACK, async (ctx) => {
@@ -142,7 +203,7 @@ export function createBot(token: string): Bot<BotContext> {
 
   bot.callbackQuery(HISTORY_CLOSE_CALLBACK, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.deleteMessage().catch(() => {});
+    await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
   });
 
   bot.callbackQuery(CALLBACKS.menuStats, async (ctx) => {
@@ -151,6 +212,7 @@ export function createBot(token: string): Bot<BotContext> {
     const result = await renderStats(
       String(ctx.from.id),
       await getInitialStatsState(String(ctx.from.id)),
+      cameFromMenu(ctx),
     );
     await replaceWithStats(ctx, result);
   });
@@ -163,20 +225,22 @@ export function createBot(token: string): Bot<BotContext> {
       await registerUser(String(ctx.from.id), ctx.from.username);
       await setPreferredCurrency(String(ctx.from.id), state.currency);
     }
-    const result = await renderStats(String(ctx.from.id), state);
+    const result = await renderStats(String(ctx.from.id), state, cameFromMenu(ctx));
     await updateStats(ctx, result);
   });
 
   bot.callbackQuery(STATS_CLOSE_CALLBACK, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.deleteMessage().catch(() => {});
+    await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
   });
 
   bot.callbackQuery(CALLBACKS.menuCategories, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
-    const { text, keyboard } = await renderCategories(String(ctx.from.id));
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = await renderCategories(String(ctx.from.id), cameFromMenu(ctx));
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(ADD_CATEGORY_CALLBACK, async (ctx) => {
@@ -186,60 +250,95 @@ export function createBot(token: string): Bot<BotContext> {
 
   bot.callbackQuery(ARCHIVE_MENU_CALLBACK, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const { text, keyboard } = renderArchiveTypePicker();
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = renderArchiveTypePicker(cameFromMenu(ctx));
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(BACK_TO_CATEGORIES_CALLBACK, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
-    const { text, keyboard } = await renderCategories(String(ctx.from.id));
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = await renderCategories(String(ctx.from.id), cameFromMenu(ctx));
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(ARCHIVE_TYPE_PATTERN, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from) return;
     const type = ctx.match[1] as 'expense' | 'income';
-    const { text, keyboard } = await renderArchiveCategoryPicker(String(ctx.from.id), type);
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = await renderArchiveCategoryPicker(
+      String(ctx.from.id),
+      type,
+      cameFromMenu(ctx),
+    );
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(ARCHIVE_ID_PATTERN, async (ctx) => {
     if (!ctx.from) return;
     const categoryId = Number(ctx.match[1]);
-    const { text, keyboard } = await handleArchive(String(ctx.from.id), categoryId);
+    const { text, keyboard } = await handleArchive(
+      String(ctx.from.id),
+      categoryId,
+      cameFromMenu(ctx),
+    );
     await ctx.answerCallbackQuery();
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(CALLBACKS.menuExport, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const { text, keyboard } = renderExportMenu();
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
+    const { text, keyboard } = renderExportMenu(cameFromMenu(ctx));
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
   });
 
   bot.callbackQuery(EXPORT_PATTERN, async (ctx) => {
     if (!ctx.from) return;
+    const fromMenu = cameFromMenu(ctx);
     const period = decodeExportPeriod(ctx.match as RegExpMatchArray);
     await ctx.answerCallbackQuery({ text: 'Готовлю файл…' });
-    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() }).catch(() => {});
-    await sendExport(ctx, String(ctx.from.id), period);
+    await ctx
+      .editMessageReplyMarkup({
+        reply_markup: fromMenu
+          ? backToMenuKeyboard()
+          : new InlineKeyboard().text('❌ Закрыть', EXPORT_CLOSE_CALLBACK),
+      })
+      .catch(logTelegramFailure(ctx, 'editMessageReplyMarkup'));
+    await sendExport(ctx, String(ctx.from.id), period, fromMenu);
   });
 
   bot.callbackQuery(EXPORT_CLOSE_CALLBACK, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.deleteMessage().catch(() => {});
+    await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
+  });
+
+  bot.callbackQuery('section:close', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
   });
 
   // просроченные кнопки отменённых диалогов
   bot.callbackQuery(CALLBACKS.cancel, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() }).catch(() => {});
+    await ctx
+      .editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
+      .catch(logTelegramFailure(ctx, 'editMessageReplyMarkup'));
   });
 
   bot.catch((err) => {
-    console.error('Bot error:', err.error);
+    logger.debug(
+      { event: 'bot.error.handled', updateId: err.ctx.update.update_id },
+      'Ошибка передана обработчику бота',
+    );
   });
 
   return bot;

@@ -1,12 +1,19 @@
+import { sectionKeyboard } from './menu.js';
 import type { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard, type Context } from 'grammy';
 import type { OperationType } from '../../db/schema.js';
 import {
+  BUTTONS,
+  CALLBACKS,
   MAX_CATEGORY_NAME_LENGTH,
   OPERATION_TYPE_EMOJI,
   OPERATION_TYPE_LABELS,
 } from '../../lib/constants/index.js';
-import { archiveCategory, createCategory, getActiveCategories } from '../../lib/services/categories.js';
+import {
+  archiveCategory,
+  createCategory,
+  getActiveCategories,
+} from '../../lib/services/categories.js';
 import { registerUser } from '../../lib/services/users.js';
 import {
   cancelKeyboard,
@@ -26,6 +33,7 @@ export const ARCHIVE_ID_PATTERN = /^catarch:id:(\d+)$/;
 /** Текст и клавиатура для экрана «Категории». */
 export async function renderCategories(
   userId: string,
+  fromMenu = true,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
   const list = await getActiveCategories(userId);
   const byType = (type: OperationType) =>
@@ -47,24 +55,37 @@ export async function renderCategories(
   const keyboard = new InlineKeyboard()
     .text('➕ Добавить категорию', ADD_CATEGORY_CALLBACK)
     .row()
-    .text('🗄 Архивировать категорию', ARCHIVE_MENU_CALLBACK);
-  return { text, keyboard };
+    .text('🗄 Архивировать категорию', ARCHIVE_MENU_CALLBACK)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack)
+    .row()
+    .text('❌ Закрыть', 'section:close');
+  return { text, keyboard: sectionKeyboard(keyboard, fromMenu) };
 }
 
 /** Экран выбора типа для архивирования. */
-export function renderArchiveTypePicker(): { text: string; keyboard: InlineKeyboard } {
+export function renderArchiveTypePicker(fromMenu = true): {
+  text: string;
+  keyboard: InlineKeyboard;
+} {
   const keyboard = new InlineKeyboard()
     .text(`${OPERATION_TYPE_EMOJI.expense} Расходы`, 'catarch:type:expense')
     .text(`${OPERATION_TYPE_EMOJI.income} Доходы`, 'catarch:type:income')
     .row()
-    .text('◀️ Назад', BACK_TO_CATEGORIES_CALLBACK);
-  return { text: 'Какую категорию архивировать? Сначала выбери тип:', keyboard };
+    .text('◀️ Назад', BACK_TO_CATEGORIES_CALLBACK)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
+  return {
+    text: 'Какую категорию архивировать? Сначала выбери тип:',
+    keyboard: sectionKeyboard(keyboard, fromMenu),
+  };
 }
 
 /** Список категорий выбранного типа для архивирования. */
 export async function renderArchiveCategoryPicker(
   userId: string,
   type: OperationType,
+  fromMenu = true,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
   const list = await getActiveCategories(userId, type);
 
@@ -74,24 +95,31 @@ export async function renderArchiveCategoryPicker(
     if (i % 2 === 1) keyboard.row();
   });
   if (list.length % 2 === 1) keyboard.row();
-  keyboard.text('◀️ Назад', ARCHIVE_MENU_CALLBACK);
+  keyboard
+    .text('◀️ Назад', ARCHIVE_MENU_CALLBACK)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 
   const text =
     list.length > 0
       ? `Выбери категорию (${OPERATION_TYPE_LABELS[type].toLowerCase()}) для архивирования:`
       : `Нет активных категорий типа «${OPERATION_TYPE_LABELS[type].toLowerCase()}».`;
-  return { text, keyboard };
+  return { text, keyboard: sectionKeyboard(keyboard, fromMenu) };
 }
 
 /** Архивирует категорию и возвращает текст+клавиатуру для показа результата. */
 export async function handleArchive(
   userId: string,
   categoryId: number,
+  fromMenu = true,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
   const archived = await archiveCategory(userId, categoryId);
-  const base = await renderCategories(userId);
+  const base = await renderCategories(userId, fromMenu);
   if (!archived) return base;
-  return { text: `✅ Категория «${archived.name}» архивирована.\n\n${base.text}`, keyboard: base.keyboard };
+  return {
+    text: `✅ Категория «${archived.name}» архивирована.\n\n${base.text}`,
+    keyboard: base.keyboard,
+  };
 }
 
 /** Диалог добавления категории: тип → название → создание. */

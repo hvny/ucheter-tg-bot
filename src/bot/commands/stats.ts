@@ -1,9 +1,11 @@
+import { logTelegramFailure } from '../logging.js';
+import { sectionKeyboard } from './menu.js';
 import { getLatestRates } from '../../lib/services/exchange.js';
 import { getPreferredCurrency } from '../../lib/services/users.js';
 import { formatDate } from '../../lib/utils/date.js';
 import { InlineKeyboard, InputFile, type Context } from 'grammy';
 import { currencyType, type Currency, type OperationType } from '../../db/schema.js';
-import { OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
+import { BUTTONS, CALLBACKS, OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
 import {
   getCategoryBreakdown,
   getConvertedStats,
@@ -56,7 +58,11 @@ export interface StatsResult {
 }
 
 /** Считает сводку и разбивку по категориям, формирует подпись, график (если есть данные) и клавиатуру. */
-export async function renderStats(userId: string, state: StatsState): Promise<StatsResult> {
+export async function renderStats(
+  userId: string,
+  state: StatsState,
+  fromMenu = true,
+): Promise<StatsResult> {
   const from = getPeriodStart(state.period);
   const snapshot = state.converted ? await getLatestRates() : undefined;
   const data =
@@ -137,18 +143,20 @@ export async function renderStats(userId: string, state: StatsState): Promise<St
       encodeStatsState({ ...state, converted: false }),
     )
     .row();
+  keyboard.text(BUTTONS.backToMenu, CALLBACKS.menuBack).row();
   keyboard.text('❌ Закрыть', STATS_CLOSE_CALLBACK);
 
+  const navigationKeyboard = sectionKeyboard(keyboard, fromMenu);
   const caption = lines.join('\n');
   if (breakdown.length === 0) {
-    return { caption, keyboard };
+    return { caption, keyboard: navigationKeyboard };
   }
 
   const photo = await renderPieChart(
     `${OPERATION_TYPE_LABELS[state.type]} по категориям · ${PERIOD_LABELS[state.period]} · ${state.currency}`,
     breakdown.map((b) => ({ label: b.categoryName, value: b.total })),
   );
-  return { caption, photo, keyboard };
+  return { caption, photo, keyboard: navigationKeyboard };
 }
 
 /** Отправляет новое сообщение со статистикой (фото+подпись либо просто текст). */
@@ -165,7 +173,7 @@ export async function sendStats(ctx: Context, result: StatsResult): Promise<void
 
 /** Удаляет текущее сообщение (например, экран /menu) и отправляет статистику заново. */
 export async function replaceWithStats(ctx: Context, result: StatsResult): Promise<void> {
-  await ctx.deleteMessage().catch(() => {});
+  await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
   await sendStats(ctx, result);
 }
 
@@ -193,7 +201,9 @@ export async function updateStats(ctx: Context, result: StatsResult): Promise<vo
     await replaceWithStats(ctx, result);
     return;
   }
-  await ctx.editMessageText(result.caption, { reply_markup: result.keyboard }).catch(() => {});
+  await ctx
+    .editMessageText(result.caption, { reply_markup: result.keyboard })
+    .catch(logTelegramFailure(ctx, 'editMessageText'));
 }
 
 export async function getInitialStatsState(userId: string): Promise<StatsState> {

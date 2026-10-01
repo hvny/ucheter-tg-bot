@@ -1,6 +1,12 @@
+import { sectionKeyboard } from './menu.js';
 import { InlineKeyboard } from 'grammy';
 import type { OperationType } from '../../db/schema.js';
-import { OPERATION_TYPE_EMOJI, OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
+import {
+  BUTTONS,
+  CALLBACKS,
+  OPERATION_TYPE_EMOJI,
+  OPERATION_TYPE_LABELS,
+} from '../../lib/constants/index.js';
 import { getActiveCategories, getCategoryById } from '../../lib/services/categories.js';
 import { listTransactions } from '../../lib/services/transactions.js';
 import { formatDate } from '../../lib/utils/date.js';
@@ -53,6 +59,7 @@ export function decodeHistoryState(match: RegExpMatchArray): HistoryState {
 export async function renderHistory(
   userId: string,
   state: HistoryState,
+  fromMenu = true,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
   const from = getPeriodStart(state.period);
   const filters = {
@@ -123,15 +130,17 @@ export async function renderHistory(
     keyboard.text('▶️', encodeHistoryState({ ...state, page: state.page + 1 }));
   keyboard.row();
 
+  keyboard.text(BUTTONS.backToMenu, CALLBACKS.menuBack).row();
   keyboard.text('❌ Закрыть', HISTORY_CLOSE_CALLBACK);
 
-  return { text, keyboard };
+  return { text, keyboard: sectionKeyboard(keyboard, fromMenu) };
 }
 
 /** Экран выбора категории для фильтра истории. */
 export async function renderHistoryCategoryMenu(
   userId: string,
   state: HistoryState,
+  fromMenu = true,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
   const list =
     state.type === 'all'
@@ -148,7 +157,10 @@ export async function renderHistoryCategoryMenu(
     if (i % 2 === 1) keyboard.row();
   });
   if (list.length % 2 === 1) keyboard.row();
-  keyboard.text('◀️ Назад', encodeHistoryState(state));
+  keyboard
+    .text('◀️ Назад', encodeHistoryState(state))
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 
-  return { text: 'Выбери категорию для фильтра:', keyboard };
+  return { text: 'Выбери категорию для фильтра:', keyboard: sectionKeyboard(keyboard, fromMenu) };
 }

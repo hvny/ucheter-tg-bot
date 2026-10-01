@@ -1,6 +1,7 @@
+import { backToMenuKeyboard, sectionKeyboard } from './menu.js';
 import { InlineKeyboard, InputFile, type Context } from 'grammy';
 import XLSX from 'xlsx-js-style';
-import { OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
+import { BUTTONS, CALLBACKS, OPERATION_TYPE_LABELS } from '../../lib/constants/index.js';
 import { listAllTransactions } from '../../lib/services/transactions.js';
 import { formatDate } from '../../lib/utils/date.js';
 import { getPeriodStart, PERIOD_LABELS, type Period } from '../../lib/utils/period.js';
@@ -16,13 +17,17 @@ export function decodeExportPeriod(match: RegExpMatchArray): Period {
 }
 
 /** Экран выбора периода перед выгрузкой. */
-export function renderExportMenu(): { text: string; keyboard: InlineKeyboard } {
+export function renderExportMenu(fromMenu = true): { text: string; keyboard: InlineKeyboard } {
   const keyboard = new InlineKeyboard();
   (['week', 'month', 'all'] as const).forEach((period) => {
     keyboard.text(PERIOD_LABELS[period], `exp:${PERIOD_CODES[period]}`);
   });
+  keyboard.row().text(BUTTONS.backToMenu, CALLBACKS.menuBack);
   keyboard.row().text('❌ Отмена', EXPORT_CLOSE_CALLBACK);
-  return { text: '📤 За какой период выгрузить операции?', keyboard };
+  return {
+    text: '📤 За какой период выгрузить операции?',
+    keyboard: sectionKeyboard(keyboard, fromMenu),
+  };
 }
 
 const HEADER_STYLE = {
@@ -61,10 +66,18 @@ export async function buildExportWorkbook(userId: string, period: Period): Promi
 }
 
 /** Генерирует файл и отправляет его документом в чат. */
-export async function sendExport(ctx: Context, userId: string, period: Period): Promise<void> {
+export async function sendExport(
+  ctx: Context,
+  userId: string,
+  period: Period,
+  fromMenu = true,
+): Promise<void> {
   const buffer = await buildExportWorkbook(userId, period);
   const filename = `ucheter-${period}-${new Date().toISOString().slice(0, 10)}.xlsx`;
   await ctx.replyWithDocument(new InputFile(buffer, filename), {
     caption: `📤 Экспорт операций · ${PERIOD_LABELS[period]}`,
+    reply_markup: fromMenu
+      ? backToMenuKeyboard()
+      : new InlineKeyboard().text('❌ Закрыть', EXPORT_CLOSE_CALLBACK),
   });
 }

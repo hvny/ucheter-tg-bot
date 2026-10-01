@@ -1,3 +1,11 @@
+import { logTelegramFailure } from './logging.js';
+import {
+  MENU_TEXT,
+  menuKeyboard,
+  backToMenuKeyboard,
+  cameFromMenu,
+  sectionKeyboard,
+} from './commands/menu.js';
 import type { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard, type Context } from 'grammy';
 import { currencyType, type Category } from '../db/schema.js';
@@ -7,6 +15,7 @@ import { BUTTONS, CALLBACKS } from '../lib/constants/index.js';
 export interface PromptRef {
   chatId: number;
   messageId: number;
+  fromMenu?: boolean;
 }
 
 export function typeKeyboard(): InlineKeyboard {
@@ -14,18 +23,25 @@ export function typeKeyboard(): InlineKeyboard {
     .text(BUTTONS.expense, 'type:expense')
     .text(BUTTONS.income, 'type:income')
     .row()
-    .text(BUTTONS.cancel, CALLBACKS.cancel);
+    .text(BUTTONS.cancel, CALLBACKS.cancel)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 }
 
 export function cancelKeyboard(): InlineKeyboard {
-  return new InlineKeyboard().text(BUTTONS.cancel, CALLBACKS.cancel);
+  return new InlineKeyboard()
+    .text(BUTTONS.cancel, CALLBACKS.cancel)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 }
 
 export function skipKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text(BUTTONS.skip, CALLBACKS.skip)
     .row()
-    .text(BUTTONS.cancel, CALLBACKS.cancel);
+    .text(BUTTONS.cancel, CALLBACKS.cancel)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 }
 
 export function categoriesKeyboard(categories: Category[]): InlineKeyboard {
@@ -38,7 +54,9 @@ export function categoriesKeyboard(categories: Category[]): InlineKeyboard {
   return keyboard
     .text(BUTTONS.newCategory, CALLBACKS.newCategory)
     .row()
-    .text(BUTTONS.cancel, CALLBACKS.cancel);
+    .text(BUTTONS.cancel, CALLBACKS.cancel)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 }
 
 /**
@@ -50,13 +68,17 @@ export async function promptMessage(
   text: string,
   keyboard: InlineKeyboard,
 ): Promise<PromptRef> {
+  const fromMenu = cameFromMenu(ctx);
+  keyboard = sectionKeyboard(keyboard, fromMenu);
   const cbMessage = ctx.callbackQuery?.message;
   if (cbMessage) {
-    await ctx.editMessageText(text, { reply_markup: keyboard }).catch(() => {});
-    return { chatId: cbMessage.chat.id, messageId: cbMessage.message_id };
+    await ctx
+      .editMessageText(text, { reply_markup: keyboard })
+      .catch(logTelegramFailure(ctx, 'editMessageText'));
+    return { chatId: cbMessage.chat.id, messageId: cbMessage.message_id, fromMenu };
   }
   const sent = await ctx.reply(text, { reply_markup: keyboard });
-  return { chatId: sent.chat.id, messageId: sent.message_id };
+  return { chatId: sent.chat.id, messageId: sent.message_id, fromMenu };
 }
 
 export async function editPrompt(
@@ -67,13 +89,10 @@ export async function editPrompt(
 ): Promise<void> {
   // "message is not modified" и подобные ошибки редактирования не должны ронять диалог
   await ctx.api
-    .editMessageText(
-      ref.chatId,
-      ref.messageId,
-      text,
-      keyboard ? { reply_markup: keyboard } : undefined,
-    )
-    .catch(() => {});
+    .editMessageText(ref.chatId, ref.messageId, text, {
+      reply_markup: sectionKeyboard(keyboard ?? backToMenuKeyboard(), ref.fromMenu ?? false),
+    })
+    .catch(logTelegramFailure(ctx, 'editMessageText'));
 }
 
 /** Завершает диалог с сообщением «Отменено». */
@@ -102,17 +121,22 @@ export async function waitCallback(
     if (data) {
       const message = ctx.callbackQuery?.message;
       if (!message || message.chat.id !== ref.chatId || message.message_id !== ref.messageId) {
-        await ctx.answerCallbackQuery().catch(() => {});
+        await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
         continue;
       }
-      await ctx.answerCallbackQuery().catch(() => {});
+      await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
+      if (data === CALLBACKS.menuBack) {
+        await editPrompt(ctx, ref, MENU_TEXT, menuKeyboard());
+        await conversation.halt();
+        throw new Error('unreachable');
+      }
       if (data === CALLBACKS.cancel) await cancelFlow(conversation, ctx, ref);
       if (pattern.test(data)) return { ctx, data };
       continue;
     }
     if (ctx.message) {
       const isCancel = ctx.message.text === '/cancel';
-      await ctx.deleteMessage().catch(() => {});
+      await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
       if (isCancel) await cancelFlow(conversation, ctx, ref);
     }
   }
@@ -136,17 +160,22 @@ export async function waitTextOrCallback(
     if (data) {
       const message = ctx.callbackQuery?.message;
       if (!message || message.chat.id !== ref.chatId || message.message_id !== ref.messageId) {
-        await ctx.answerCallbackQuery().catch(() => {});
+        await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
         continue;
       }
-      await ctx.answerCallbackQuery().catch(() => {});
+      await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
+      if (data === CALLBACKS.menuBack) {
+        await editPrompt(ctx, ref, MENU_TEXT, menuKeyboard());
+        await conversation.halt();
+        throw new Error('unreachable');
+      }
       if (data === CALLBACKS.cancel) await cancelFlow(conversation, ctx, ref);
       if (allowedCallbacks?.test(data)) return { kind: 'callback', data, ctx };
       continue;
     }
     if (!ctx.message) continue;
     const text = ctx.message.text;
-    await ctx.deleteMessage().catch(() => {});
+    await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
     if (!text) continue;
     if (text === '/cancel') await cancelFlow(conversation, ctx, ref);
     if (text.startsWith('/')) continue;
@@ -166,5 +195,9 @@ export async function waitText(
 export function currencyKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   for (const currency of currencyType.enumValues) keyboard.text(currency, `currency:${currency}`);
-  return keyboard.row().text(BUTTONS.cancel, CALLBACKS.cancel);
+  return keyboard
+    .row()
+    .text(BUTTONS.cancel, CALLBACKS.cancel)
+    .row()
+    .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 }
