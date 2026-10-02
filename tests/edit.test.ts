@@ -1,3 +1,4 @@
+import { InlineKeyboard } from 'grammy';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Conversation } from '@grammyjs/conversations';
@@ -17,6 +18,8 @@ const item = {
 
 function fixture(inputs: string[], externalResults: unknown[]) {
   const screens: string[] = [];
+  const keyboards: InlineKeyboard[] = [];
+  const externalCalls: string[] = [];
   let calls = 0;
   const context = (input: string): Context =>
     ({
@@ -26,7 +29,13 @@ function fixture(inputs: string[], externalResults: unknown[]) {
         : { data: input, message: { chat: { id: 42 }, message_id: 9 } },
       message: input.startsWith('text:') ? { text: input.slice(5) } : undefined,
       api: {
-        editMessageText: async (_chat: number, _id: number, text: string) => {
+        editMessageText: async (
+          _chat: number,
+          _id: number,
+          text: string,
+          options: { reply_markup: InlineKeyboard },
+        ) => {
+          keyboards.push(options.reply_markup);
           screens.push(text);
         },
       },
@@ -40,7 +49,8 @@ function fixture(inputs: string[], externalResults: unknown[]) {
       },
     }) as unknown as Context;
   const conversation = {
-    external: async () => {
+    external: async (fn: () => unknown) => {
+      externalCalls.push(fn.toString());
       assert.ok(calls < externalResults.length, 'Unexpected database write/read');
       return externalResults[calls++];
     },
@@ -52,7 +62,14 @@ function fixture(inputs: string[], externalResults: unknown[]) {
       throw new Error('cancelled');
     },
   } as unknown as Conversation;
-  return { conversation, ctx: context('edit:1'), screens, calls: () => calls };
+  return {
+    conversation,
+    ctx: context('edit:1'),
+    screens,
+    keyboards,
+    externalCalls,
+    calls: () => calls,
+  };
 }
 
 test('edit validates amount, changes currency, clears comment, and saves explicitly', async () => {
@@ -77,10 +94,18 @@ test('edit validates amount, changes currency, clears comment, and saves explici
 });
 
 test('cancel after changes does not write the transaction', async () => {
-  const f = fixture(['ef:currency', 'currency:USD', 'cancel'], [item, { name: 'Еда' }]);
+  const f = fixture(
+    ['ef:currency', 'currency:USD', 'cancel'],
+    [item, { name: 'Еда' }, { text: '📜 Все операции', keyboard: new InlineKeyboard() }],
+  );
   await assert.rejects(editOperation(f.conversation, f.ctx), /cancelled/);
-  assert.equal(f.calls(), 2);
-  assert.equal(f.screens.at(-1), 'Отменено.');
+  assert.equal(f.calls(), 3);
+  assert.equal(f.screens.at(-1), '📜 Все операции');
+  assert.ok(
+    !f.externalCalls.some(
+      (fn) => fn.includes('updateTransaction') || fn.includes('deleteTransaction'),
+    ),
+  );
 });
 
 test('missing or foreign transaction cannot enter editing', async () => {
@@ -99,9 +124,67 @@ test('changing type requires a matching category before save', async () => {
   assert.ok(f.screens.at(-1)?.includes('Доход · 10 RUB · Зарплата'));
 });
 
-test('back to menu after editing discards unsaved changes', async () => {
-  const f = fixture(['ef:amount', 'text:250', 'menu:back'], [item, { name: 'Еда' }]);
+test('stale back to menu button also returns to history while editing', async () => {
+  const f = fixture(
+    ['ef:amount', 'text:250', 'menu:back'],
+    [item, { name: 'Еда' }, { text: '📜 Все операции', keyboard: new InlineKeyboard() }],
+  );
   await assert.rejects(editOperation(f.conversation, f.ctx), /cancelled/);
-  assert.equal(f.calls(), 2);
-  assert.equal(f.screens.at(-1), '📋 Меню — что делаем?');
+  assert.equal(f.calls(), 3);
+  assert.equal(f.screens.at(-1), '📜 Все операции');
+});
+
+test('editing hides back to menu at every step', async () => {
+  const f = fixture(['ef:amount', 'text:250', 'ef:save'], [item, { name: 'Еда' }, item]);
+  await editOperation(f.conversation, f.ctx);
+  for (const keyboard of f.keyboards)
+    assert.ok(
+      !keyboard.inline_keyboard
+        .flat()
+        .some((b) => 'callback_data' in b && b.callback_data === 'menu:back'),
+    );
+});
+
+test('cancel during text input returns to all operations without saving', async () => {
+  const f = fixture(
+    ['ef:amount', 'text:/cancel'],
+    [item, { name: 'Еда' }, { text: '📜 Все операции', keyboard: new InlineKeyboard() }],
+  );
+  await assert.rejects(editOperation(f.conversation, f.ctx), /cancelled/);
+  assert.equal(f.screens.at(-1), '📜 Все операции');
+  assert.ok(
+    !f.externalCalls.some(
+      (fn) => fn.includes('updateTransaction') || fn.includes('deleteTransaction'),
+    ),
+  );
+});
+
+test('delete requires confirmation and returns to refreshed history', async () => {
+  const f = fixture(
+    ['ef:delete', 'ef:confirm_delete'],
+    [item, { name: 'Еда' }, true, { text: '📜 Все операции', keyboard: new InlineKeyboard() }],
+  );
+  await editOperation(f.conversation, f.ctx);
+  assert.ok(f.screens.some((s) => s.includes('Удалить операцию?')));
+  assert.equal(f.externalCalls.filter((fn) => fn.includes('deleteTransaction')).length, 1);
+  assert.ok(f.screens.at(-1)?.includes('Операция удалена.'));
+  assert.ok(f.screens.at(-1)?.includes('Все операции'));
+});
+
+test('declining deletion keeps editing and cancellation never deletes', async () => {
+  const f = fixture(
+    ['ef:delete', 'ef:keep', 'cancel'],
+    [item, { name: 'Еда' }, { text: '📜 Все операции', keyboard: new InlineKeyboard() }],
+  );
+  await assert.rejects(editOperation(f.conversation, f.ctx), /cancelled/);
+  assert.ok(!f.externalCalls.some((fn) => fn.includes('deleteTransaction')));
+});
+
+test('already deleted operation returns to history without success notice', async () => {
+  const f = fixture(
+    ['ef:delete', 'ef:confirm_delete'],
+    [item, { name: 'Еда' }, false, { text: '📜 Все операции', keyboard: new InlineKeyboard() }],
+  );
+  await editOperation(f.conversation, f.ctx);
+  assert.ok(f.screens.at(-1)?.includes('уже удалена или недоступна'));
 });

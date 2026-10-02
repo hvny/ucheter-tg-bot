@@ -1,3 +1,4 @@
+import { DEFAULT_HISTORY_STATE, renderHistory } from './commands/history.js';
 import { logTelegramFailure } from './logging.js';
 import {
   MENU_TEXT,
@@ -16,6 +17,7 @@ export interface PromptRef {
   chatId: number;
   messageId: number;
   fromMenu?: boolean;
+  editingOperation?: boolean;
 }
 
 export function typeKeyboard(): InlineKeyboard {
@@ -90,7 +92,10 @@ export async function editPrompt(
   // "message is not modified" и подобные ошибки редактирования не должны ронять диалог
   await ctx.api
     .editMessageText(ref.chatId, ref.messageId, text, {
-      reply_markup: sectionKeyboard(keyboard ?? backToMenuKeyboard(), ref.fromMenu ?? false),
+      reply_markup: sectionKeyboard(
+        keyboard ?? backToMenuKeyboard(),
+        (ref.fromMenu ?? false) && !ref.editingOperation,
+      ),
     })
     .catch(logTelegramFailure(ctx, 'editMessageText'));
 }
@@ -101,7 +106,8 @@ export async function cancelFlow(
   ctx: Context,
   ref: PromptRef,
 ): Promise<never> {
-  await editPrompt(ctx, ref, 'Отменено.');
+  if (ref.editingOperation) await returnToHistory(conversation, ctx, ref);
+  else await editPrompt(ctx, ref, 'Отменено.');
   await conversation.halt();
   throw new Error('unreachable');
 }
@@ -126,6 +132,7 @@ export async function waitCallback(
       }
       await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
       if (data === CALLBACKS.menuBack) {
+        if (ref.editingOperation) await cancelFlow(conversation, ctx, ref);
         await editPrompt(ctx, ref, MENU_TEXT, menuKeyboard());
         await conversation.halt();
         throw new Error('unreachable');
@@ -165,6 +172,7 @@ export async function waitTextOrCallback(
       }
       await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
       if (data === CALLBACKS.menuBack) {
+        if (ref.editingOperation) await cancelFlow(conversation, ctx, ref);
         await editPrompt(ctx, ref, MENU_TEXT, menuKeyboard());
         await conversation.halt();
         throw new Error('unreachable');
@@ -200,4 +208,27 @@ export function currencyKeyboard(): InlineKeyboard {
     .text(BUTTONS.cancel, CALLBACKS.cancel)
     .row()
     .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
+}
+
+/** Return from editing to all operations, retaining the original menu origin. */
+export async function returnToHistory(
+  conversation: Conversation,
+  ctx: Context,
+  ref: PromptRef,
+  notice?: string,
+): Promise<void> {
+  if (!ctx.from) return;
+  const result = await conversation.external(() =>
+    renderHistory(
+      String(ctx.from!.id),
+      { ...DEFAULT_HISTORY_STATE, type: 'all', period: 'all', categoryId: 0, page: 0 },
+      ref.fromMenu ?? false,
+    ),
+  );
+  await editPrompt(
+    ctx,
+    { ...ref, editingOperation: false },
+    notice ? `${notice}\n\n${result.text}` : result.text,
+    result.keyboard,
+  );
 }

@@ -301,3 +301,12 @@ export async function getConvertedStats(
     estimatedRates,
   };
 }
+
+/** Delete only an operation owned by the requesting Telegram user. */
+export async function deleteTransaction(userId: string, id: number): Promise<boolean> {
+  const deleted = await db
+    .delete(transactions)
+    .where(and(eq(transactions.userId, userId), eq(transactions.id, id)))
+    .returning({ id: transactions.id });
+  return deleted.length > 0;
+}
