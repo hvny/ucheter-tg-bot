@@ -112,10 +112,6 @@ export async function cancelFlow(
   throw new Error('unreachable');
 }
 
-/**
- * Ждёт нажатия inline-кнопки, подходящей под pattern.
- * Отмена (кнопка или /cancel) прерывает диалог. Посторонние текстовые сообщения удаляются.
- */
 export async function waitCallback(
   conversation: Conversation,
   ref: PromptRef,
@@ -210,7 +206,6 @@ export function currencyKeyboard(): InlineKeyboard {
     .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 }
 
-/** Return from editing to all operations, retaining the original menu origin. */
 export async function returnToHistory(
   conversation: Conversation,
   ctx: Context,
