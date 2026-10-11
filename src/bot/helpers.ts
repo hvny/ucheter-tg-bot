@@ -120,11 +120,7 @@ export async function waitCallback(
 ): Promise<{ ctx: Context; data: string }> {
   for (;;) {
     const ctx = await conversation.wait();
-    if (
-      /^\/(start|language|notifications)(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(ctx.message?.text ?? '')
-    )
-      await conversation.skip({ next: true });
-    if (/^(?:daily:|notifications:|menu:notifications)/.test(ctx.callbackQuery?.data ?? ''))
+    if (/^\/(start|language)(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(ctx.message?.text ?? ''))
       await conversation.skip({ next: true });
     const data = ctx.callbackQuery?.data;
     if (data) {
@@ -166,11 +162,7 @@ export async function waitTextOrCallback(
 ): Promise<TextOrCallback> {
   for (;;) {
     const ctx = await conversation.wait();
-    if (
-      /^\/(start|language|notifications)(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(ctx.message?.text ?? '')
-    )
-      await conversation.skip({ next: true });
-    if (/^(?:daily:|notifications:|menu:notifications)/.test(ctx.callbackQuery?.data ?? ''))
+    if (/^\/(start|language)(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(ctx.message?.text ?? ''))
       await conversation.skip({ next: true });
     const data = ctx.callbackQuery?.data;
     if (data) {

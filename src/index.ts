@@ -1,4 +1,3 @@
-import { startDailyNotificationJob } from './lib/services/notifications.js';
 import 'dotenv/config';
 import { logger } from './lib/logging/logger.js';
 import { startExchangeRateJob } from './lib/services/exchange.js';
@@ -22,7 +21,6 @@ if (!process.env.DATABASE_URL) {
 
 const bot = createBot(token);
 const exchangeRateJob = startExchangeRateJob();
-const notificationJob = startDailyNotificationJob(bot.api);
 
 try {
   await bot.api.setMyCommands([
@@ -33,7 +31,6 @@ try {
     { command: 'categories', description: 'Категории' },
     { command: 'export', description: 'Экспорт в Excel' },
     { command: 'language', description: 'Язык / Language' },
-    { command: 'notifications', description: 'Ежедневная сводка' },
     { command: 'cancel', description: 'Отменить текущий диалог' },
   ]);
   await bot.api.setMyCommands(
@@ -45,7 +42,6 @@ try {
       { command: 'categories', description: 'Categories' },
       { command: 'export', description: 'Export to Excel' },
       { command: 'language', description: 'Language' },
-      { command: 'notifications', description: 'Daily summary settings' },
       { command: 'cancel', description: 'Cancel current conversation' },
     ],
     { language_code: 'en' },
@@ -55,7 +51,6 @@ try {
     { event: 'bot.start.failed', stage: 'set-commands', err: error },
     'Не удалось запустить бота',
   );
-  await notificationJob.destroy();
   await exchangeRateJob.destroy();
   process.exit(1);
 }
@@ -68,7 +63,6 @@ void bot
   })
   .catch(async (error: unknown) => {
     logger.fatal({ event: 'bot.polling.failed', err: error }, 'Опрос Telegram остановился');
-    await notificationJob.destroy();
     await exchangeRateJob.destroy();
     process.exit(1);
   });
@@ -78,7 +72,6 @@ async function shutdown(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
   logger.info({ event: 'bot.stopping', signal }, 'Останавливаю бота');
-  await notificationJob.destroy();
   await exchangeRateJob.destroy();
   if (bot.isRunning()) await bot.stop();
   logger.info({ event: 'bot.stopped' }, 'Бот остановлен');

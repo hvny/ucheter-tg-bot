@@ -1,4 +1,3 @@
-import { currentLanguage } from '../i18n/index.js';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 
 const WIDTH = 640;
@@ -41,34 +40,6 @@ export async function renderPieChart(title: string, slices: PieSlice[]): Promise
       ],
     },
     options: {
-      plugins: {
-        title: { display: true, text: title, font: { size: 18 } },
-        legend: { position: 'bottom' },
-      },
-    },
-  });
-}
-
-export async function renderDailyChart(
-  title: string,
-  labels: string[],
-  income: number[],
-  expense: number[],
-  incomeLabel: string,
-  expenseLabel: string,
-): Promise<Buffer> {
-  return chartCanvas.renderToBuffer({
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: incomeLabel, data: income, backgroundColor: '#59a14f' },
-        { label: expenseLabel, data: expense, backgroundColor: '#e15759' },
-      ],
-    },
-    options: {
-      locale: currentLanguage() === 'en' ? 'en-GB' : 'ru-RU',
-      scales: { y: { beginAtZero: true } },
       plugins: {
         title: { display: true, text: title, font: { size: 18 } },
         legend: { position: 'bottom' },

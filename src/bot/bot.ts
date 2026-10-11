@@ -1,8 +1,3 @@
-import {
-  showNotifications,
-  handleNotificationAction,
-  showDailyDetails,
-} from './commands/notifications.js';
 import { chooseLanguage, showLanguagePicker } from './commands/language.js';
 import {
   i18n,
@@ -143,44 +138,6 @@ export function createBot(token: string): Bot<BotContext> {
   bot.callbackQuery(/^language:(ru|en)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     await chooseLanguage(ctx, ctx.match[1] as Language);
-  });
-
-  bot.command('notifications', async (ctx) => {
-    await ctx.conversation.exitAll();
-    await showNotifications(ctx);
-  });
-  bot.callbackQuery('menu:notifications', async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await ctx.conversation.exitAll();
-    await showNotifications(ctx, true);
-  });
-  bot.callbackQuery(
-    /^daily:details:(\d+)(?::(expense|income):(RUB|USD|EUR|RSD):(all|one))?$/,
-    async (ctx) => {
-      await ctx.answerCallbackQuery();
-      await ctx.conversation.exitAll();
-      if (ctx.from && ctx.match[4] === 'all')
-        await setPreferredCurrency(
-          String(ctx.from.id),
-          ctx.match[3] as 'RUB' | 'USD' | 'EUR' | 'RSD',
-        );
-      await showDailyDetails(
-        ctx,
-        Number(ctx.match[1]),
-        ctx.match[2]
-          ? {
-              type: ctx.match[2] as 'expense' | 'income',
-              currency: ctx.match[3] as 'RUB' | 'USD' | 'EUR' | 'RSD',
-              converted: ctx.match[4] === 'all',
-            }
-          : undefined,
-      );
-    },
-  );
-  bot.callbackQuery(/^(?:notifications:.*|daily:on|daily:off)$/, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await ctx.conversation.exitAll();
-    await handleNotificationAction(ctx);
   });
 
   bot.command('menu', async (ctx) => {

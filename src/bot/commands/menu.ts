@@ -17,9 +17,7 @@ export function menuKeyboard(): InlineKeyboard {
     .row()
     .text(BUTTONS.export, CALLBACKS.menuExport)
     .row()
-    .text(tr('language-button'), 'menu:language')
-    .row()
-    .text(tr('daily-settings-button'), 'menu:notifications');
+    .text(tr('language-button'), 'menu:language');
 }
 
 export function backToMenuKeyboard(): InlineKeyboard {

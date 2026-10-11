@@ -61,19 +61,14 @@ export async function renderStats(
   userId: string,
   state: StatsState,
   fromMenu = true,
-  window?: { from: Date; to: Date; label: string; deliveryId: number },
 ): Promise<StatsResult> {
-  const from = window?.from ?? getPeriodStart(state.period);
-  const periodLabel = window?.label ?? PERIOD_LABELS[state.period];
-  const encode = (next: StatsState) =>
-    window && next.period === state.period
-      ? `daily:details:${window.deliveryId}:${next.type}:${next.currency}:${next.converted ? 'all' : 'one'}`
-      : encodeStatsState(next);
+  const from = getPeriodStart(state.period);
+  const periodLabel = PERIOD_LABELS[state.period];
   const data = state.converted
-    ? await getConvertedStats(userId, state.type, state.currency, from, window?.to)
+    ? await getConvertedStats(userId, state.type, state.currency, from)
     : {
-        summary: await getSummary(userId, from, state.currency, window?.to),
-        breakdown: await getCategoryBreakdown(userId, state.type, from, state.currency, window?.to),
+        summary: await getSummary(userId, from, state.currency),
+        breakdown: await getCategoryBreakdown(userId, state.type, from, state.currency),
         missingRates: 0,
         estimatedRates: 0,
       };
@@ -105,7 +100,7 @@ export async function renderStats(
     lines.splice(2);
     lines.push(tr('stats-message-8', { v0: data.missingRates }), tr('stats-message-9'));
     for (const currency of currencyType.enumValues) {
-      const original = await getSummary(userId, from, currency, window?.to);
+      const original = await getSummary(userId, from, currency);
       if (original.income || original.expense)
         lines.push(
           tr('stats-message-10', {
@@ -128,31 +123,30 @@ export async function renderStats(
   }
 
   const keyboard = new InlineKeyboard();
-  if (window) keyboard.text(`✓ ${periodLabel}`, encode(state)).row();
   (['week', 'month', 'all'] as const).forEach((period) => {
-    const label = (!window && period === state.period ? '✓ ' : '') + PERIOD_LABELS[period];
+    const label = (period === state.period ? '✓ ' : '') + PERIOD_LABELS[period];
     keyboard.text(label, encodeStatsState({ ...state, period }));
   });
   keyboard.row();
   (['expense', 'income'] as const).forEach((type) => {
     const label = (type === state.type ? '✓ ' : '') + OPERATION_TYPE_LABELS[type];
-    keyboard.text(label, encode({ ...state, type }));
+    keyboard.text(label, encodeStatsState({ ...state, type }));
   });
   keyboard.row();
   for (const currency of currencyType.enumValues)
     keyboard.text(
       (currency === state.currency ? '✓ ' : '') + currency,
-      encode({ ...state, currency }),
+      encodeStatsState({ ...state, currency }),
     );
   keyboard.row();
   keyboard
     .text(
       (state.converted ? '✓ ' : '') + tr('stats-message-14'),
-      encode({ ...state, converted: true }),
+      encodeStatsState({ ...state, converted: true }),
     )
     .text(
       (!state.converted ? '✓ ' : '') + tr('stats-message-15'),
-      encode({ ...state, converted: false }),
+      encodeStatsState({ ...state, converted: false }),
     )
     .row();
   keyboard.text(BUTTONS.backToMenu, CALLBACKS.menuBack).row();

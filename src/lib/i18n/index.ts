@@ -1,4 +1,3 @@
-import { isTimeZone } from '../utils/time-zone.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { I18n, type I18nFlavor } from '@grammyjs/i18n';
 import type { Context } from 'grammy';
@@ -34,7 +33,13 @@ export function parseStartPayload(
   const decoded = Buffer.from(match[2], 'base64url');
   if (decoded.toString('base64url') !== match[2]) return undefined;
   const timeZone = decoded.toString('utf8');
-  return isTimeZone(timeZone) ? { language, timeZone } : undefined;
+  // Preserve language handling for existing links that also carried a time zone.
+  try {
+    new Intl.DateTimeFormat('en', { timeZone }).format();
+    return { language, timeZone };
+  } catch {
+    return undefined;
+  }
 }
 export function parseLanguagePayload(payload: string): Language | undefined {
   return parseStartPayload(payload)?.language;

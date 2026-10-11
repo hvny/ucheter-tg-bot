@@ -90,3 +90,23 @@ test('update metadata never includes messages, arguments or callback payloads', 
   ] as const)
     assert.equal(updateKind(ctx as unknown as Context), action);
 });
+
+test('nested database and AggregateError connection failures retain safe codes', () => {
+  const databaseError = Object.assign(new Error('secret database query'), { code: '42703' });
+  assert.deepEqual(
+    safeError(new Error('secret', { cause: new Error('secret', { cause: databaseError }) })),
+    { kind: 'database', code: '42703' },
+  );
+  const networkError = Object.assign(new Error('secret host'), { code: 'ECONNREFUSED' });
+  const aggregate = new AggregateError([networkError], 'secret address');
+  const wrapped = new Error('secret SQL', { cause: aggregate });
+  assert.deepEqual(safeError(wrapped), { kind: 'network', code: 'ECONNREFUSED' });
+  const { log, output } = capture();
+  log.error({ event: 'test.failure', err: wrapped }, 'Failure');
+  assert.ok(!output().includes('secret'));
+  assert.equal(JSON.parse(output()).err.code, 'ECONNREFUSED');
+  const cyclic: { cause?: unknown } = {};
+  cyclic.cause = cyclic;
+  assert.deepEqual(safeError(cyclic), { kind: 'unknown', code: 'unknown' });
+  assert.deepEqual(safeError(new TypeError('secret')), { kind: 'unknown', code: 'type-error' });
+});

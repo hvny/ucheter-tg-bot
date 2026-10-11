@@ -101,25 +101,11 @@ test('deep links and manual selection persist language across updates', async ()
     assert.ok(messages.at(-1)?.includes('Меню'));
     const encodedZone = Buffer.from('Europe/Belgrade').toString('base64url');
     await command(`/start lang_en_tz_${encodedZone}`);
-    assert.equal(timeZone, 'Europe/Belgrade');
-    assert.equal(dailyNotifications, true);
-    assert.ok(messages.at(-1)?.includes('20:00 (Europe/Belgrade)'));
-    await bot.handleUpdate({
-      update_id: ++updateId,
-      callback_query: {
-        id: 'off',
-        from,
-        chat_instance: 'chat',
-        data: 'daily:off',
-        message: { message_id: 1, date: 0, chat: { id: 42, type: 'private' } },
-      },
-    });
+    assert.equal(language, 'en');
+    assert.equal(timeZone, null);
     assert.equal(dailyNotifications, false);
-    const newZone = Buffer.from('America/New_York').toString('base64url');
-    await command(`/start lang_en_tz_${newZone}`);
-    assert.equal(timeZone, 'America/New_York');
-    assert.equal(dailyNotifications, false);
-    assert.ok(messages.at(-1)?.includes('remains off'));
+    assert.ok(messages.at(-1)?.includes('Welcome'));
+    assert.ok(!messages.at(-1)?.includes('Daily summary'));
   } finally {
     db.select = originalSelect;
     db.update = originalUpdate;
