@@ -2,8 +2,14 @@ import { isTimeZone } from '../utils/time-zone.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { I18n, type I18nFlavor } from '@grammyjs/i18n';
 import type { Context } from 'grammy';
-import ru from './ru.json' with { type: 'json' };
-import en from './en.json' with { type: 'json' };
+import { createRequire } from 'node:module';
+import type russianCatalog from './ru.json';
+import type englishCatalog from './en.json';
+
+// Load JSON without import attributes for Node runtimes that cannot parse `with`.
+const require = createRequire(import.meta.url);
+export const ru = require('./ru.json') as typeof russianCatalog;
+export const en = require('./en.json') as typeof englishCatalog;
 
 export type Language = 'ru' | 'en';
 export type LocalizedContext = Context & I18nFlavor;

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import ru from '../src/lib/i18n/ru.json' with { type: 'json' };
-import en from '../src/lib/i18n/en.json' with { type: 'json' };
+import { ru, en } from '../src/lib/i18n/index.js';
 import {
   currentLanguage,
   i18n,
