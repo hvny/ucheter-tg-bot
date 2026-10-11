@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n/index.js';
 import { logTelegramFailure } from '../logging.js';
 import { sectionKeyboard } from './menu.js';
 import { getPreferredCurrency } from '../../lib/services/users.js';
@@ -60,13 +61,19 @@ export async function renderStats(
   userId: string,
   state: StatsState,
   fromMenu = true,
+  window?: { from: Date; to: Date; label: string; deliveryId: number },
 ): Promise<StatsResult> {
-  const from = getPeriodStart(state.period);
+  const from = window?.from ?? getPeriodStart(state.period);
+  const periodLabel = window?.label ?? PERIOD_LABELS[state.period];
+  const encode = (next: StatsState) =>
+    window && next.period === state.period
+      ? `daily:details:${window.deliveryId}:${next.type}:${next.currency}:${next.converted ? 'all' : 'one'}`
+      : encodeStatsState(next);
   const data = state.converted
-    ? await getConvertedStats(userId, state.type, state.currency, from)
+    ? await getConvertedStats(userId, state.type, state.currency, from, window?.to)
     : {
-        summary: await getSummary(userId, from, state.currency),
-        breakdown: await getCategoryBreakdown(userId, state.type, from, state.currency),
+        summary: await getSummary(userId, from, state.currency, window?.to),
+        breakdown: await getCategoryBreakdown(userId, state.type, from, state.currency, window?.to),
         missingRates: 0,
         estimatedRates: 0,
       };
@@ -79,77 +86,77 @@ export async function renderStats(
   const balanceSign = balance > 0 ? '+' : '';
 
   const lines = [
-    `📊 Статистика · ${PERIOD_LABELS[state.period]} · ${state.converted ? 'Все валюты → ' : ''}${state.currency}`,
+    tr('stats-message-2', {
+      v0: periodLabel,
+      v1: state.converted ? tr('stats-message-1') : '',
+      v2: state.currency,
+    }),
     '',
-    `📈 Доход: ${formatAmount(summary.income)} ${state.currency}`,
-    `📉 Расход: ${formatAmount(summary.expense)} ${state.currency}`,
-    `💰 Баланс: ${balanceSign}${formatAmount(balance)} ${state.currency}`,
+    tr('stats-message-3', { v0: formatAmount(summary.income), v1: state.currency }),
+    tr('stats-message-4', { v0: formatAmount(summary.expense), v1: state.currency }),
+    tr('stats-message-5', { v0: balanceSign, v1: formatAmount(balance), v2: state.currency }),
   ];
 
   if (state.converted && !incomplete) {
-    lines.push('', 'По закреплённым курсам операций · ExchangeRate-API');
-    if (data.estimatedRates)
-      lines.push(
-        `Приблизительный курс использован для ${data.estimatedRates} операций: курс на их дату отсутствовал.`,
-      );
+    lines.push('', tr('stats-message-6'));
+    if (data.estimatedRates) lines.push(tr('stats-message-7', { v0: data.estimatedRates }));
   }
   if (incomplete) {
     lines.splice(2);
-    lines.push(
-      `Для ${data.missingRates} операций курс ещё не закреплён. Общий итог пока недоступен.`,
-      'Суммы без пересчёта:',
-    );
+    lines.push(tr('stats-message-8', { v0: data.missingRates }), tr('stats-message-9'));
     for (const currency of currencyType.enumValues) {
-      const original = await getSummary(userId, from, currency);
+      const original = await getSummary(userId, from, currency, window?.to);
       if (original.income || original.expense)
         lines.push(
-          `${currency}: доход ${formatAmount(original.income)}, расход ${formatAmount(original.expense)}`,
+          tr('stats-message-10', {
+            v0: currency,
+            v1: formatAmount(original.income),
+            v2: formatAmount(original.expense),
+          }),
         );
     }
-    lines.push('Можно переключиться на «Одна валюта».');
+    lines.push(tr('stats-message-11'));
   }
 
   if (breakdown.length > 0) {
-    lines.push('', `Разбивка по категориям (${OPERATION_TYPE_LABELS[state.type].toLowerCase()}):`);
+    lines.push('', tr('stats-message-12', { v0: OPERATION_TYPE_LABELS[state.type].toLowerCase() }));
     for (const item of breakdown) {
       lines.push(`• ${item.categoryName}: ${formatAmount(item.total)} ${state.currency}`);
     }
   } else if (!incomplete) {
-    lines.push(
-      '',
-      `Нет операций типа «${OPERATION_TYPE_LABELS[state.type].toLowerCase()}» за этот период.`,
-    );
+    lines.push('', tr('stats-message-13', { v0: OPERATION_TYPE_LABELS[state.type].toLowerCase() }));
   }
 
   const keyboard = new InlineKeyboard();
+  if (window) keyboard.text(`✓ ${periodLabel}`, encode(state)).row();
   (['week', 'month', 'all'] as const).forEach((period) => {
-    const label = (period === state.period ? '✓ ' : '') + PERIOD_LABELS[period];
+    const label = (!window && period === state.period ? '✓ ' : '') + PERIOD_LABELS[period];
     keyboard.text(label, encodeStatsState({ ...state, period }));
   });
   keyboard.row();
   (['expense', 'income'] as const).forEach((type) => {
     const label = (type === state.type ? '✓ ' : '') + OPERATION_TYPE_LABELS[type];
-    keyboard.text(label, encodeStatsState({ ...state, type }));
+    keyboard.text(label, encode({ ...state, type }));
   });
   keyboard.row();
   for (const currency of currencyType.enumValues)
     keyboard.text(
       (currency === state.currency ? '✓ ' : '') + currency,
-      encodeStatsState({ ...state, currency }),
+      encode({ ...state, currency }),
     );
   keyboard.row();
   keyboard
     .text(
-      (state.converted ? '✓ ' : '') + 'Все валюты',
-      encodeStatsState({ ...state, converted: true }),
+      (state.converted ? '✓ ' : '') + tr('stats-message-14'),
+      encode({ ...state, converted: true }),
     )
     .text(
-      (!state.converted ? '✓ ' : '') + 'Одна валюта',
-      encodeStatsState({ ...state, converted: false }),
+      (!state.converted ? '✓ ' : '') + tr('stats-message-15'),
+      encode({ ...state, converted: false }),
     )
     .row();
   keyboard.text(BUTTONS.backToMenu, CALLBACKS.menuBack).row();
-  keyboard.text('❌ Закрыть', STATS_CLOSE_CALLBACK);
+  keyboard.text(tr('categories-message-7'), STATS_CLOSE_CALLBACK);
 
   const navigationKeyboard = sectionKeyboard(keyboard, fromMenu);
   const caption = lines.join('\n');
@@ -158,7 +165,11 @@ export async function renderStats(
   }
 
   const photo = await renderPieChart(
-    `${OPERATION_TYPE_LABELS[state.type]} по категориям · ${PERIOD_LABELS[state.period]} · ${state.currency}`,
+    tr('stats-message-16', {
+      v0: OPERATION_TYPE_LABELS[state.type],
+      v1: periodLabel,
+      v2: state.currency,
+    }),
     breakdown.map((b) => ({ label: b.categoryName, value: b.total })),
   );
   return { caption, photo, keyboard: navigationKeyboard };

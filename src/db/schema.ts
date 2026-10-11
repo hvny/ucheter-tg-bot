@@ -5,6 +5,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -18,6 +19,10 @@ export const operationType = pgEnum('operation_type', ['expense', 'income']);
 export const users = pgTable('users', {
   id: text('id').primaryKey(), // telegram user id
   username: text('username'),
+  language: text('language').$type<'ru' | 'en'>().notNull().default('ru'),
+  timeZone: text('time_zone'),
+  notificationTime: integer('notification_time').notNull().default(1200), // minutes after local midnight
+  dailyNotifications: boolean('daily_notifications').notNull().default(false),
   preferredCurrency: currencyType('preferred_currency').notNull().default('RUB'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -63,3 +68,21 @@ export type Category = typeof categories.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type OperationType = (typeof operationType.enumValues)[number];
+
+/** Persistent send claims survive restarts and prevent concurrent daily deliveries. */
+export const dailyDeliveries = pgTable(
+  'daily_deliveries',
+  {
+    id: serial('id').notNull().unique(),
+    timeZone: text('time_zone').notNull(),
+    windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    localDate: text('local_date').notNull(),
+    leaseUntil: timestamp('lease_until', { withTimezone: true }).notNull(),
+    attempts: integer('attempts').notNull().default(1),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.localDate] })],
+);

@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n/index.js';
 import { DEFAULT_HISTORY_STATE, encodeHistoryState } from './history.js';
 import { sectionKeyboard } from './menu.js';
 import type { Conversation } from '@grammyjs/conversations';
@@ -31,7 +32,7 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
   const id = Number(ctx.callbackQuery?.data?.match(EDIT_PATTERN)?.[1]);
   const item = await conversation.external(() => getTransactionById(userId, id));
   if (!item) {
-    await ctx.reply('Операция не найдена. Открой /history.');
+    await ctx.reply(tr('edit-message-1'));
     return;
   }
   let type = item.type;
@@ -41,31 +42,37 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
   let comment = item.comment ?? '';
   let categoryName =
     (await conversation.external(() => getCategoryById(userId, categoryId)))?.name ??
-    'Без категории';
+    tr('edit-message-2');
   const ref = await promptMessage(
     ctx,
-    'Редактирование операции',
+    tr('edit-message-3'),
     sectionKeyboard(cancelKeyboard(), false),
   );
   ref.editingOperation = true;
   for (;;) {
     const keyboard = new InlineKeyboard()
-      .text('Сумма', 'ef:amount')
-      .text('Валюта', 'ef:currency')
+      .text(tr('edit-message-4'), 'ef:amount')
+      .text(tr('edit-message-5'), 'ef:currency')
       .row()
-      .text('Тип', 'ef:type')
-      .text('Категория', 'ef:category')
+      .text(tr('edit-message-6'), 'ef:type')
+      .text(tr('edit-message-7'), 'ef:category')
       .row()
-      .text('Комментарий', 'ef:comment')
+      .text(tr('edit-message-8'), 'ef:comment')
       .row()
-      .text('✅ Сохранить', 'ef:save')
-      .text('❌ Отмена', 'cancel')
+      .text(tr('edit-message-9'), 'ef:save')
+      .text(tr('edit-message-10'), 'cancel')
       .row()
-      .text('🗑 Удалить операцию', 'ef:delete');
+      .text(tr('edit-message-11'), 'ef:delete');
     await editPrompt(
       ctx,
       ref,
-      `✏️ ${OPERATION_TYPE_LABELS[type]}\n${formatAmount(amount)} ${currency} · ${categoryName}\nКомментарий: ${comment || '—'}\n\nВыбери, что изменить:`,
+      tr('edit-message-12', {
+        v0: OPERATION_TYPE_LABELS[type],
+        v1: formatAmount(amount),
+        v2: currency,
+        v3: categoryName,
+        v4: comment || '—',
+      }),
       keyboard,
     );
     const choice = await waitCallback(
@@ -78,12 +85,16 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
       await editPrompt(
         ctx,
         ref,
-        `Удалить операцию?\n${OPERATION_TYPE_LABELS[item.type]} · ${formatAmount(item.amount)} ${item.currency}\n\nУдаление нельзя отменить.`,
+        tr('edit-message-13', {
+          v0: OPERATION_TYPE_LABELS[item.type],
+          v1: formatAmount(item.amount),
+          v2: item.currency,
+        }),
         new InlineKeyboard()
-          .text('🗑 Да, удалить', 'ef:confirm_delete')
+          .text(tr('edit-message-14'), 'ef:confirm_delete')
           .row()
-          .text('◀️ Не удалять', 'ef:keep')
-          .text('❌ Отмена', 'cancel'),
+          .text(tr('edit-message-15'), 'ef:keep')
+          .text(tr('edit-message-10'), 'cancel'),
       );
       const confirmation = await waitCallback(conversation, ref, /^ef:(confirm_delete|keep)$/);
       if (confirmation.data === 'ef:keep') continue;
@@ -92,7 +103,7 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
         conversation,
         confirmation.ctx,
         ref,
-        deleted ? '✅ Операция удалена.' : 'Операция уже удалена или недоступна.',
+        deleted ? tr('edit-message-16') : tr('edit-message-17'),
       );
       return;
     }
@@ -110,17 +121,23 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
         choice.ctx,
         ref,
         updated
-          ? `✅ Операция обновлена\n${OPERATION_TYPE_LABELS[type]} · ${formatAmount(amount)} ${currency} · ${categoryName}${comment ? `\n💬 ${comment}` : ''}`
-          : 'Не удалось сохранить: операция или категория не найдена. Открой /history.',
+          ? tr('edit-message-18', {
+              v0: OPERATION_TYPE_LABELS[type],
+              v1: formatAmount(amount),
+              v2: currency,
+              v3: categoryName,
+              v4: comment ? `\n💬 ${comment}` : '',
+            })
+          : tr('edit-message-19'),
         new InlineKeyboard().text(
-          '📜 Все операции',
+          tr('edit-message-20'),
           encodeHistoryState({ ...DEFAULT_HISTORY_STATE, period: 'all' }),
         ),
       );
       return;
     }
     if (field === 'amount') {
-      await editPrompt(ctx, ref, 'Введи новую сумму:', cancelKeyboard());
+      await editPrompt(ctx, ref, tr('edit-message-21'), cancelKeyboard());
       for (;;) {
         const result = await waitText(conversation, ref);
         const parsed = parseAmount(result.text);
@@ -128,15 +145,10 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
           amount = parsed;
           break;
         }
-        await editPrompt(
-          result.ctx,
-          ref,
-          'Введи положительное число, например 250 или 99,90:',
-          cancelKeyboard(),
-        );
+        await editPrompt(result.ctx, ref, tr('edit-message-22'), cancelKeyboard());
       }
     } else if (field === 'currency') {
-      await editPrompt(ctx, ref, 'Выбери валюту:', currencyKeyboard());
+      await editPrompt(ctx, ref, tr('edit-message-23'), currencyKeyboard());
       currency = (await waitCallback(conversation, ref, /^currency:(RUB|USD|EUR|RSD)$/)).data.split(
         ':',
       )[1] as Currency;
@@ -144,18 +156,18 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
       await editPrompt(
         ctx,
         ref,
-        'Введи комментарий или удали существующий:',
+        tr('edit-message-24'),
         new InlineKeyboard()
-          .text('Удалить комментарий', 'ef:clear')
+          .text(tr('edit-message-25'), 'ef:clear')
           .row()
-          .text('❌ Отмена', 'cancel'),
+          .text(tr('edit-message-10'), 'cancel'),
       );
       const result = await waitTextOrCallback(conversation, ref, /^ef:clear$/);
       comment = result.kind === 'text' ? result.text.slice(0, MAX_COMMENT_LENGTH) : '';
     } else {
       let nextType = type;
       if (field === 'type') {
-        await editPrompt(ctx, ref, 'Выбери тип операции:', typeKeyboard());
+        await editPrompt(ctx, ref, tr('edit-message-26'), typeKeyboard());
         nextType = (await waitCallback(conversation, ref, /^type:(expense|income)$/)).data.split(
           ':',
         )[1] as OperationType;
@@ -168,19 +180,14 @@ export async function editOperation(conversation: Conversation, ctx: Context): P
         if (original) list.push(original);
       }
       if (!list.length) {
-        await editPrompt(
-          ctx,
-          ref,
-          'Нет категорий этого типа. Создай категорию через /categories.',
-          cancelKeyboard(),
-        );
+        await editPrompt(ctx, ref, tr('edit-message-27'), cancelKeyboard());
         await waitCallback(conversation, ref, /^cancel$/);
         return;
       }
       const categories = new InlineKeyboard();
       for (const category of list) categories.text(category.name, `ec:${category.id}`).row();
-      categories.text('❌ Отмена', 'cancel');
-      await editPrompt(ctx, ref, 'Выбери категорию:', categories);
+      categories.text(tr('edit-message-10'), 'cancel');
+      await editPrompt(ctx, ref, tr('edit-message-28'), categories);
       for (;;) {
         const selected = await waitCallback(conversation, ref, /^ec:\d+$/);
         const category = list.find((c) => c.id === Number(selected.data.split(':')[1]));

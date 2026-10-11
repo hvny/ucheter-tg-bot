@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n/index.js';
 import { sectionKeyboard } from './menu.js';
 import { InlineKeyboard } from 'grammy';
 import type { OperationType } from '../../db/schema.js';
@@ -75,22 +76,26 @@ export async function renderHistory(
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const categoryLabel = state.categoryId
-    ? ((await getCategoryById(userId, state.categoryId))?.name ?? 'Все категории')
-    : 'Все категории';
+    ? ((await getCategoryById(userId, state.categoryId))?.name ?? tr('history-message-1'))
+    : tr('history-message-1');
 
   const lines = items.length
     ? items.map((t) => {
         const sign = t.type === 'expense' ? '−' : '+';
         const comment = t.comment ? ` — ${t.comment}` : '';
-        return `${OPERATION_TYPE_EMOJI[t.type]} ${sign}${formatAmount(t.amount)} ${t.currency} · ${t.categoryName ?? 'Без категории'}${comment}\n   ${formatDate(t.createdAt)}`;
+        return `${OPERATION_TYPE_EMOJI[t.type]} ${sign}${formatAmount(t.amount)} ${t.currency} · ${t.categoryName ?? tr('edit-message-2')}${comment}\n   ${formatDate(t.createdAt)}`;
       })
-    : ['Операций не найдено.'];
+    : [tr('history-message-2')];
 
   const text = [
-    '📜 История операций',
+    tr('history-message-3'),
     '',
-    `Тип: ${state.type === 'all' ? 'Все' : OPERATION_TYPE_LABELS[state.type]} · Период: ${PERIOD_LABELS[state.period]} · Категория: ${categoryLabel}`,
-    `Стр. ${state.page + 1}/${totalPages} · всего операций: ${total}`,
+    tr('history-message-5', {
+      v0: state.type === 'all' ? tr('history-message-4') : OPERATION_TYPE_LABELS[state.type],
+      v1: PERIOD_LABELS[state.period],
+      v2: categoryLabel,
+    }),
+    tr('history-message-6', { v0: state.page + 1, v1: totalPages, v2: total }),
     '',
     ...lines,
   ].join('\n');
@@ -106,7 +111,8 @@ export async function renderHistory(
 
   (['all', 'expense', 'income'] as const).forEach((type) => {
     const label =
-      (type === state.type ? '✓ ' : '') + (type === 'all' ? 'Все' : OPERATION_TYPE_LABELS[type]);
+      (type === state.type ? '✓ ' : '') +
+      (type === 'all' ? tr('history-message-4') : OPERATION_TYPE_LABELS[type]);
     keyboard.text(label, encodeHistoryState({ ...state, type, categoryId: 0, page: 0 }));
   });
   keyboard.row();
@@ -131,7 +137,7 @@ export async function renderHistory(
   keyboard.row();
 
   keyboard.text(BUTTONS.backToMenu, CALLBACKS.menuBack).row();
-  keyboard.text('❌ Закрыть', HISTORY_CLOSE_CALLBACK);
+  keyboard.text(tr('categories-message-7'), HISTORY_CLOSE_CALLBACK);
 
   return { text, keyboard: sectionKeyboard(keyboard, fromMenu) };
 }
@@ -148,7 +154,9 @@ export async function renderHistoryCategoryMenu(
       : await getActiveCategories(userId, state.type);
 
   const keyboard = new InlineKeyboard();
-  keyboard.text('Все категории', encodeHistoryState({ ...state, categoryId: 0, page: 0 })).row();
+  keyboard
+    .text(tr('history-message-1'), encodeHistoryState({ ...state, categoryId: 0, page: 0 }))
+    .row();
   list.forEach((category, i) => {
     keyboard.text(
       category.name,
@@ -158,9 +166,9 @@ export async function renderHistoryCategoryMenu(
   });
   if (list.length % 2 === 1) keyboard.row();
   keyboard
-    .text('◀️ Назад', encodeHistoryState(state))
+    .text(tr('categories-message-10'), encodeHistoryState(state))
     .row()
     .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 
-  return { text: 'Выбери категорию для фильтра:', keyboard: sectionKeyboard(keyboard, fromMenu) };
+  return { text: tr('history-message-7'), keyboard: sectionKeyboard(keyboard, fromMenu) };
 }

@@ -1,8 +1,11 @@
+import { tr } from '../../lib/i18n/index.js';
 import { logTelegramFailure } from '../logging.js';
 import { InlineKeyboard, type Context } from 'grammy';
 import { BUTTONS, CALLBACKS } from '../../lib/constants/index.js';
 
-export const MENU_TEXT = '📋 Меню — что делаем?';
+export function menuText(): string {
+  return tr('menu-message-1');
+}
 
 export function menuKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
@@ -12,7 +15,11 @@ export function menuKeyboard(): InlineKeyboard {
     .text(BUTTONS.stats, CALLBACKS.menuStats)
     .text(BUTTONS.categories, CALLBACKS.menuCategories)
     .row()
-    .text(BUTTONS.export, CALLBACKS.menuExport);
+    .text(BUTTONS.export, CALLBACKS.menuExport)
+    .row()
+    .text(tr('language-button'), 'menu:language')
+    .row()
+    .text(tr('daily-settings-button'), 'menu:notifications');
 }
 
 export function backToMenuKeyboard(): InlineKeyboard {
@@ -23,10 +30,10 @@ export function backToMenuKeyboard(): InlineKeyboard {
 export async function returnToMenu(ctx: Context): Promise<void> {
   const message = ctx.callbackQuery?.message;
   if (message && 'text' in message) {
-    await ctx.editMessageText(MENU_TEXT, { reply_markup: menuKeyboard() });
+    await ctx.editMessageText(menuText(), { reply_markup: menuKeyboard() });
   } else {
     await ctx.deleteMessage().catch(logTelegramFailure(ctx, 'deleteMessage'));
-    await ctx.reply(MENU_TEXT, { reply_markup: menuKeyboard() });
+    await ctx.reply(menuText(), { reply_markup: menuKeyboard() });
   }
 }
 

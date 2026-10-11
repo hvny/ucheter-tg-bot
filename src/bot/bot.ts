@@ -1,7 +1,22 @@
+import {
+  showNotifications,
+  handleNotificationAction,
+  showDailyDetails,
+} from './commands/notifications.js';
+import { chooseLanguage, showLanguagePicker } from './commands/language.js';
+import {
+  i18n,
+  withLanguage,
+  normalizeLanguage,
+  parseLanguagePayload,
+  type LocalizedContext,
+  type Language,
+  tr,
+} from '../lib/i18n/index.js';
 import { logger } from '../lib/logging/logger.js';
 import { updateKind } from './logging.js';
 import { logTelegramFailure } from './logging.js';
-import { registerUser, setPreferredCurrency } from '../lib/services/users.js';
+import { getUserLanguage, registerUser, setPreferredCurrency } from '../lib/services/users.js';
 import {
   conversations,
   createConversation,
@@ -41,7 +56,7 @@ import {
   sendExport,
 } from './commands/export.js';
 import {
-  MENU_TEXT,
+  menuText,
   menuKeyboard,
   returnToMenu,
   backToMenuKeyboard,
@@ -59,7 +74,7 @@ import {
   updateStats,
 } from './commands/stats.js';
 
-export type BotContext = ConversationFlavor<Context>;
+export type BotContext = ConversationFlavor<LocalizedContext>;
 
 export function createBot(token: string): Bot<BotContext> {
   const bot = new Bot<BotContext>(token);
@@ -91,6 +106,17 @@ export function createBot(token: string): Bot<BotContext> {
       throw error;
     }
   });
+  bot.use(async (ctx, next) => {
+    const stored = ctx.from ? await getUserLanguage(String(ctx.from.id)) : undefined;
+    const startPayload =
+      ctx.message?.text?.match(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+(.+))?$/)?.[1] ?? '';
+    const explicit = parseLanguagePayload(startPayload);
+    const choice = ctx.callbackQuery?.data?.match(/^language:(ru|en)$/)?.[1] as
+      Language | undefined;
+    const language = explicit ?? choice ?? stored ?? normalizeLanguage(ctx.from?.language_code);
+    await withLanguage(language, next);
+  });
+  bot.use(i18n);
   bot.use(conversations());
   bot.use(createConversation(addOperation));
   bot.use(createConversation(addCategory));
@@ -101,10 +127,64 @@ export function createBot(token: string): Bot<BotContext> {
     await ctx.conversation.enter('editOperation');
   });
 
-  bot.command('start', handleStart);
+  bot.command('start', async (ctx) => {
+    await ctx.conversation.exitAll();
+    await handleStart(ctx);
+  });
+
+  bot.command('language', async (ctx) => {
+    await ctx.conversation.exitAll();
+    await showLanguagePicker(ctx);
+  });
+  bot.callbackQuery('menu:language', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showLanguagePicker(ctx, true);
+  });
+  bot.callbackQuery(/^language:(ru|en)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await chooseLanguage(ctx, ctx.match[1] as Language);
+  });
+
+  bot.command('notifications', async (ctx) => {
+    await ctx.conversation.exitAll();
+    await showNotifications(ctx);
+  });
+  bot.callbackQuery('menu:notifications', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.exitAll();
+    await showNotifications(ctx, true);
+  });
+  bot.callbackQuery(
+    /^daily:details:(\d+)(?::(expense|income):(RUB|USD|EUR|RSD):(all|one))?$/,
+    async (ctx) => {
+      await ctx.answerCallbackQuery();
+      await ctx.conversation.exitAll();
+      if (ctx.from && ctx.match[4] === 'all')
+        await setPreferredCurrency(
+          String(ctx.from.id),
+          ctx.match[3] as 'RUB' | 'USD' | 'EUR' | 'RSD',
+        );
+      await showDailyDetails(
+        ctx,
+        Number(ctx.match[1]),
+        ctx.match[2]
+          ? {
+              type: ctx.match[2] as 'expense' | 'income',
+              currency: ctx.match[3] as 'RUB' | 'USD' | 'EUR' | 'RSD',
+              converted: ctx.match[4] === 'all',
+            }
+          : undefined,
+      );
+    },
+  );
+  bot.callbackQuery(/^(?:notifications:.*|daily:on|daily:off)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.conversation.exitAll();
+    await handleNotificationAction(ctx);
+  });
 
   bot.command('menu', async (ctx) => {
-    await ctx.reply(MENU_TEXT, { reply_markup: menuKeyboard() });
+    await ctx.reply(menuText(), { reply_markup: menuKeyboard() });
   });
 
   bot.command('add', async (ctx) => {
@@ -145,7 +225,7 @@ export function createBot(token: string): Bot<BotContext> {
   // /cancel вне диалога (внутри диалога его перехватывает сам диалог)
   bot.command('cancel', async (ctx) => {
     await ctx.conversation.exitAll();
-    await ctx.reply('Сейчас нет активного диалога. Меню: /menu');
+    await ctx.reply(tr('bot-message-1'));
   });
 
   bot.callbackQuery(CALLBACKS.menuBack, async (ctx) => {
@@ -305,12 +385,12 @@ export function createBot(token: string): Bot<BotContext> {
     if (!ctx.from) return;
     const fromMenu = cameFromMenu(ctx);
     const period = decodeExportPeriod(ctx.match as RegExpMatchArray);
-    await ctx.answerCallbackQuery({ text: 'Готовлю файл…' });
+    await ctx.answerCallbackQuery({ text: tr('bot-message-2') });
     await ctx
       .editMessageReplyMarkup({
         reply_markup: fromMenu
           ? backToMenuKeyboard()
-          : new InlineKeyboard().text('❌ Закрыть', EXPORT_CLOSE_CALLBACK),
+          : new InlineKeyboard().text(tr('categories-message-7'), EXPORT_CLOSE_CALLBACK),
       })
       .catch(logTelegramFailure(ctx, 'editMessageReplyMarkup'));
     await sendExport(ctx, String(ctx.from.id), period, fromMenu);

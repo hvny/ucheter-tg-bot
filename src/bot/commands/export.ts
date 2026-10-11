@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n/index.js';
 import { backToMenuKeyboard, sectionKeyboard } from './menu.js';
 import { InlineKeyboard, InputFile, type Context } from 'grammy';
 import XLSX from 'xlsx-js-style';
@@ -23,9 +24,9 @@ export function renderExportMenu(fromMenu = true): { text: string; keyboard: Inl
     keyboard.text(PERIOD_LABELS[period], `exp:${PERIOD_CODES[period]}`);
   });
   keyboard.row().text(BUTTONS.backToMenu, CALLBACKS.menuBack);
-  keyboard.row().text('❌ Отмена', EXPORT_CLOSE_CALLBACK);
+  keyboard.row().text(tr('edit-message-10'), EXPORT_CLOSE_CALLBACK);
   return {
-    text: '📤 За какой период выгрузить операции?',
+    text: tr('export-message-1'),
     keyboard: sectionKeyboard(keyboard, fromMenu),
   };
 }
@@ -41,11 +42,18 @@ export async function buildExportWorkbook(userId: string, period: Period): Promi
   const from = getPeriodStart(period);
   const items = await listAllTransactions(userId, from ? { from } : {});
 
-  const header = ['Дата', 'Тип', 'Категория', 'Сумма', 'Валюта', 'Комментарий'];
+  const header = [
+    tr('export-message-2'),
+    tr('edit-message-6'),
+    tr('edit-message-7'),
+    tr('edit-message-4'),
+    tr('edit-message-5'),
+    tr('edit-message-8'),
+  ];
   const rows = items.map((t) => [
     formatDate(t.createdAt),
     OPERATION_TYPE_LABELS[t.type],
-    t.categoryName ?? 'Без категории',
+    t.categoryName ?? tr('edit-message-2'),
     Number(t.amount) * (t.type === 'expense' ? -1 : 1),
     t.currency,
     t.comment ?? '',
@@ -60,7 +68,7 @@ export async function buildExportWorkbook(userId: string, period: Period): Promi
   }
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Операции');
+  XLSX.utils.book_append_sheet(workbook, sheet, tr('export-message-3'));
 
   return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' }) as Buffer;
 }
@@ -75,9 +83,9 @@ export async function sendExport(
   const buffer = await buildExportWorkbook(userId, period);
   const filename = `ucheter-${period}-${new Date().toISOString().slice(0, 10)}.xlsx`;
   await ctx.replyWithDocument(new InputFile(buffer, filename), {
-    caption: `📤 Экспорт операций · ${PERIOD_LABELS[period]}`,
+    caption: tr('export-message-4', { v0: PERIOD_LABELS[period] }),
     reply_markup: fromMenu
       ? backToMenuKeyboard()
-      : new InlineKeyboard().text('❌ Закрыть', EXPORT_CLOSE_CALLBACK),
+      : new InlineKeyboard().text(tr('categories-message-7'), EXPORT_CLOSE_CALLBACK),
   });
 }

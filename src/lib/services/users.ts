@@ -1,3 +1,4 @@
+import { currentLanguage, withLanguage, type Language } from '../i18n/index.js';
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { categories, users, type Currency, type User } from '../../db/schema.js';
@@ -11,6 +12,7 @@ import { DEFAULT_CATEGORIES } from '../constants/index.js';
 export async function registerUser(
   id: string,
   username?: string,
+  language: Language = currentLanguage(),
 ): Promise<{ user: User; isNew: boolean }> {
   const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (existing) {
@@ -23,11 +25,13 @@ export async function registerUser(
   const user = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(users)
-      .values({ id, username: username ?? null })
+      .values({ id, username: username ?? null, language })
       .returning();
 
-    const defaults = (['expense', 'income'] as const).flatMap((type) =>
-      DEFAULT_CATEGORIES[type].map((name) => ({ userId: id, name, type })),
+    const defaults = withLanguage(language, () =>
+      (['expense', 'income'] as const).flatMap((type) =>
+        DEFAULT_CATEGORIES[type].map((name) => ({ userId: id, name, type })),
+      ),
     );
     await tx.insert(categories).values(defaults);
 
@@ -47,4 +51,15 @@ export async function getPreferredCurrency(userId: string): Promise<Currency> {
 
 export async function setPreferredCurrency(userId: string, currency: Currency): Promise<void> {
   await db.update(users).set({ preferredCurrency: currency }).where(eq(users.id, userId));
+}
+
+export async function getUserLanguage(userId: string): Promise<Language | undefined> {
+  const [user] = await db
+    .select({ language: users.language })
+    .from(users)
+    .where(eq(users.id, userId));
+  return user?.language === 'en' ? 'en' : user ? 'ru' : undefined;
+}
+export async function setUserLanguage(userId: string, language: Language): Promise<void> {
+  await db.update(users).set({ language }).where(eq(users.id, userId));
 }

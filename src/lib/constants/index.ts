@@ -1,22 +1,36 @@
+import { tr } from '../i18n/index.js';
 import type { OperationType } from '../../db/schema.js';
 
 export const DEFAULT_CATEGORIES: Record<OperationType, string[]> = {
-  expense: [
-    'Продукты',
-    'Транспорт',
-    'Жильё',
-    'Кафе и рестораны',
-    'Здоровье',
-    'Развлечения',
-    'Одежда',
-    'Прочее',
-  ],
-  income: ['Зарплата', 'Подработка', 'Подарки', 'Прочее'],
+  get expense() {
+    return [
+      tr('index-message-1'),
+      tr('index-message-2'),
+      tr('index-message-3'),
+      tr('index-message-4'),
+      tr('index-message-5'),
+      tr('index-message-6'),
+      tr('index-message-7'),
+      tr('index-message-8'),
+    ];
+  },
+  get income() {
+    return [
+      tr('index-message-9'),
+      tr('index-message-10'),
+      tr('index-message-11'),
+      tr('index-message-8'),
+    ];
+  },
 };
 
 export const OPERATION_TYPE_LABELS: Record<OperationType, string> = {
-  expense: 'Расход',
-  income: 'Доход',
+  get expense() {
+    return tr('index-message-12');
+  },
+  get income() {
+    return tr('index-message-13');
+  },
 };
 
 export const OPERATION_TYPE_EMOJI: Record<OperationType, string> = {
@@ -25,17 +39,39 @@ export const OPERATION_TYPE_EMOJI: Record<OperationType, string> = {
 };
 
 export const BUTTONS = {
-  expense: '📉 Расход',
-  income: '📈 Доход',
-  newCategory: '➕ Новая категория',
-  skip: '⏭ Пропустить',
-  cancel: '❌ Отмена',
-  backToMenu: '◀️ Назад в меню',
-  add: '➕ Добавить',
-  history: '📜 Просмотреть',
-  stats: '📊 Статистика',
-  categories: '🗂 Категории',
-  export: '📤 Экспорт',
+  get expense() {
+    return tr('index-message-14');
+  },
+  get income() {
+    return tr('index-message-15');
+  },
+  get newCategory() {
+    return tr('index-message-16');
+  },
+  get skip() {
+    return tr('index-message-17');
+  },
+  get cancel() {
+    return tr('edit-message-10');
+  },
+  get backToMenu() {
+    return tr('index-message-18');
+  },
+  get add() {
+    return tr('index-message-19');
+  },
+  get history() {
+    return tr('index-message-20');
+  },
+  get stats() {
+    return tr('index-message-21');
+  },
+  get categories() {
+    return tr('index-message-22');
+  },
+  get export() {
+    return tr('index-message-23');
+  },
 } as const;
 
 export const CALLBACKS = {

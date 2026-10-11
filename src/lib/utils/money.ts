@@ -1,3 +1,4 @@
+import { currentLanguage } from '../i18n/index.js';
 import { MAX_AMOUNT } from '../constants/index.js';
 
 /**
@@ -17,7 +18,7 @@ export function parseAmount(input: string): number | null {
 
 export function formatAmount(amount: number | string): string {
   const value = typeof amount === 'string' ? Number(amount) : amount;
-  return new Intl.NumberFormat('ru-RU', {
+  return new Intl.NumberFormat(currentLanguage() === 'en' ? 'en-GB' : 'ru-RU', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);

@@ -2,12 +2,7 @@ import { InlineKeyboard } from 'grammy';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Context } from 'grammy';
-import {
-  MENU_TEXT,
-  returnToMenu,
-  cameFromMenu,
-  sectionKeyboard,
-} from '../src/bot/commands/menu.js';
+import { menuText, returnToMenu, cameFromMenu, sectionKeyboard } from '../src/bot/commands/menu.js';
 
 for (const media of [false, true]) {
   test(`return from ${media ? 'photo statistics' : 'text section'} to menu`, async () => {
@@ -15,14 +10,14 @@ for (const media of [false, true]) {
     const ctx = {
       callbackQuery: { message: media ? { photo: [{}] } : { text: 'История' } },
       editMessageText: async (text: string) => {
-        assert.equal(text, MENU_TEXT);
+        assert.equal(text, menuText());
         calls.push('edit');
       },
       deleteMessage: async () => {
         calls.push('delete');
       },
       reply: async (text: string) => {
-        assert.equal(text, MENU_TEXT);
+        assert.equal(text, menuText());
         calls.push('reply');
       },
     } as unknown as Context;

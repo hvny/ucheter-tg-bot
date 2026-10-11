@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n/index.js';
 import { sectionKeyboard } from './menu.js';
 import type { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard, type Context } from 'grammy';
@@ -40,26 +41,26 @@ export async function renderCategories(
     list
       .filter((c) => c.type === type)
       .map((c) => `• ${c.name}`)
-      .join('\n') || '— пока пусто —';
+      .join('\n') || tr('categories-message-1');
 
   const text = [
-    '🗂 Твои категории',
+    tr('categories-message-2'),
     '',
-    `${OPERATION_TYPE_EMOJI.expense} Расходы:`,
+    tr('categories-message-3', { v0: OPERATION_TYPE_EMOJI.expense }),
     byType('expense'),
     '',
-    `${OPERATION_TYPE_EMOJI.income} Доходы:`,
+    tr('categories-message-4', { v0: OPERATION_TYPE_EMOJI.income }),
     byType('income'),
   ].join('\n');
 
   const keyboard = new InlineKeyboard()
-    .text('➕ Добавить категорию', ADD_CATEGORY_CALLBACK)
+    .text(tr('categories-message-5'), ADD_CATEGORY_CALLBACK)
     .row()
-    .text('🗄 Архивировать категорию', ARCHIVE_MENU_CALLBACK)
+    .text(tr('categories-message-6'), ARCHIVE_MENU_CALLBACK)
     .row()
     .text(BUTTONS.backToMenu, CALLBACKS.menuBack)
     .row()
-    .text('❌ Закрыть', 'section:close');
+    .text(tr('categories-message-7'), 'section:close');
   return { text, keyboard: sectionKeyboard(keyboard, fromMenu) };
 }
 
@@ -69,14 +70,14 @@ export function renderArchiveTypePicker(fromMenu = true): {
   keyboard: InlineKeyboard;
 } {
   const keyboard = new InlineKeyboard()
-    .text(`${OPERATION_TYPE_EMOJI.expense} Расходы`, 'catarch:type:expense')
-    .text(`${OPERATION_TYPE_EMOJI.income} Доходы`, 'catarch:type:income')
+    .text(tr('categories-message-8', { v0: OPERATION_TYPE_EMOJI.expense }), 'catarch:type:expense')
+    .text(tr('categories-message-9', { v0: OPERATION_TYPE_EMOJI.income }), 'catarch:type:income')
     .row()
-    .text('◀️ Назад', BACK_TO_CATEGORIES_CALLBACK)
+    .text(tr('categories-message-10'), BACK_TO_CATEGORIES_CALLBACK)
     .row()
     .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
   return {
-    text: 'Какую категорию архивировать? Сначала выбери тип:',
+    text: tr('categories-message-11'),
     keyboard: sectionKeyboard(keyboard, fromMenu),
   };
 }
@@ -96,14 +97,14 @@ export async function renderArchiveCategoryPicker(
   });
   if (list.length % 2 === 1) keyboard.row();
   keyboard
-    .text('◀️ Назад', ARCHIVE_MENU_CALLBACK)
+    .text(tr('categories-message-10'), ARCHIVE_MENU_CALLBACK)
     .row()
     .text(BUTTONS.backToMenu, CALLBACKS.menuBack);
 
   const text =
     list.length > 0
-      ? `Выбери категорию (${OPERATION_TYPE_LABELS[type].toLowerCase()}) для архивирования:`
-      : `Нет активных категорий типа «${OPERATION_TYPE_LABELS[type].toLowerCase()}».`;
+      ? tr('categories-message-12', { v0: OPERATION_TYPE_LABELS[type].toLowerCase() })
+      : tr('categories-message-13', { v0: OPERATION_TYPE_LABELS[type].toLowerCase() });
   return { text, keyboard: sectionKeyboard(keyboard, fromMenu) };
 }
 
@@ -117,7 +118,7 @@ export async function handleArchive(
   const base = await renderCategories(userId, fromMenu);
   if (!archived) return base;
   return {
-    text: `✅ Категория «${archived.name}» архивирована.\n\n${base.text}`,
+    text: tr('categories-message-14', { v0: archived.name, v1: base.text }),
     keyboard: base.keyboard,
   };
 }
@@ -130,28 +131,26 @@ export async function addCategory(conversation: Conversation, ctx: Context): Pro
 
   await conversation.external(() => registerUser(userId, from.username));
 
-  const ref = await promptMessage(ctx, 'Категория для чего?', typeKeyboard());
+  const ref = await promptMessage(ctx, tr('categories-message-15'), typeKeyboard());
   const typeResult = await waitCallback(conversation, ref, /^type:(expense|income)$/);
   const type = typeResult.data.split(':')[1] as OperationType;
 
-  await editPrompt(typeResult.ctx, ref, 'Введи название новой категории:', cancelKeyboard());
+  await editPrompt(typeResult.ctx, ref, tr('add-message-3'), cancelKeyboard());
   for (;;) {
     const { text, ctx: nameCtx } = await waitText(conversation, ref);
     const name = text.slice(0, MAX_CATEGORY_NAME_LENGTH);
     if (!name) {
-      await editPrompt(
-        nameCtx,
-        ref,
-        'Название не может быть пустым. Введи название категории:',
-        cancelKeyboard(),
-      );
+      await editPrompt(nameCtx, ref, tr('add-message-4'), cancelKeyboard());
       continue;
     }
     const category = await conversation.external(() => createCategory(userId, name, type));
     await editPrompt(
       nameCtx,
       ref,
-      `✅ Категория «${category.name}» (${OPERATION_TYPE_LABELS[type].toLowerCase()}) добавлена.\n\nСписок категорий: /categories`,
+      tr('categories-message-16', {
+        v0: category.name,
+        v1: OPERATION_TYPE_LABELS[type].toLowerCase(),
+      }),
     );
     return;
   }

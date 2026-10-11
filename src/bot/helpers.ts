@@ -1,7 +1,8 @@
+import { tr } from '../lib/i18n/index.js';
 import { DEFAULT_HISTORY_STATE, renderHistory } from './commands/history.js';
 import { logTelegramFailure } from './logging.js';
 import {
-  MENU_TEXT,
+  menuText,
   menuKeyboard,
   backToMenuKeyboard,
   cameFromMenu,
@@ -107,7 +108,7 @@ export async function cancelFlow(
   ref: PromptRef,
 ): Promise<never> {
   if (ref.editingOperation) await returnToHistory(conversation, ctx, ref);
-  else await editPrompt(ctx, ref, 'Отменено.');
+  else await editPrompt(ctx, ref, tr('helpers-message-1'));
   await conversation.halt();
   throw new Error('unreachable');
 }
@@ -119,6 +120,12 @@ export async function waitCallback(
 ): Promise<{ ctx: Context; data: string }> {
   for (;;) {
     const ctx = await conversation.wait();
+    if (
+      /^\/(start|language|notifications)(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(ctx.message?.text ?? '')
+    )
+      await conversation.skip({ next: true });
+    if (/^(?:daily:|notifications:|menu:notifications)/.test(ctx.callbackQuery?.data ?? ''))
+      await conversation.skip({ next: true });
     const data = ctx.callbackQuery?.data;
     if (data) {
       const message = ctx.callbackQuery?.message;
@@ -129,7 +136,7 @@ export async function waitCallback(
       await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
       if (data === CALLBACKS.menuBack) {
         if (ref.editingOperation) await cancelFlow(conversation, ctx, ref);
-        await editPrompt(ctx, ref, MENU_TEXT, menuKeyboard());
+        await editPrompt(ctx, ref, menuText(), menuKeyboard());
         await conversation.halt();
         throw new Error('unreachable');
       }
@@ -159,6 +166,12 @@ export async function waitTextOrCallback(
 ): Promise<TextOrCallback> {
   for (;;) {
     const ctx = await conversation.wait();
+    if (
+      /^\/(start|language|notifications)(?:@[A-Za-z0-9_]+)?(?:\s|$)/.test(ctx.message?.text ?? '')
+    )
+      await conversation.skip({ next: true });
+    if (/^(?:daily:|notifications:|menu:notifications)/.test(ctx.callbackQuery?.data ?? ''))
+      await conversation.skip({ next: true });
     const data = ctx.callbackQuery?.data;
     if (data) {
       const message = ctx.callbackQuery?.message;
@@ -169,7 +182,7 @@ export async function waitTextOrCallback(
       await ctx.answerCallbackQuery().catch(logTelegramFailure(ctx, 'answerCallbackQuery'));
       if (data === CALLBACKS.menuBack) {
         if (ref.editingOperation) await cancelFlow(conversation, ctx, ref);
-        await editPrompt(ctx, ref, MENU_TEXT, menuKeyboard());
+        await editPrompt(ctx, ref, menuText(), menuKeyboard());
         await conversation.halt();
         throw new Error('unreachable');
       }

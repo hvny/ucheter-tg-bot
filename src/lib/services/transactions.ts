@@ -1,6 +1,7 @@
+import { tr } from '../i18n/index.js';
 import { getRatesForDate } from './exchange.js';
 import { convertAmount } from '../utils/exchange.js';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import {
   categories,
@@ -48,6 +49,8 @@ export interface TransactionFilters {
   categoryId?: number;
   /** Учитывать операции начиная с этой даты (включительно). */
   from?: Date;
+  /** Exclusive end of the reporting window. */
+  to?: Date;
 }
 
 export interface TransactionWithCategory extends Transaction {
@@ -61,6 +64,7 @@ function transactionFilterConditions(userId: string, filters: TransactionFilters
     ...(filters.type ? [eq(transactions.type, filters.type)] : []),
     ...(filters.categoryId ? [eq(transactions.categoryId, filters.categoryId)] : []),
     ...(filters.from ? [gte(transactions.createdAt, filters.from)] : []),
+    ...(filters.to ? [lt(transactions.createdAt, filters.to)] : []),
   );
 }
 
@@ -139,8 +143,13 @@ export async function getSummary(
   userId: string,
   from?: Date,
   currency: Currency = 'RUB',
+  to?: Date,
 ): Promise<PeriodSummary> {
-  const where = transactionFilterConditions(userId, { currency, ...(from ? { from } : {}) });
+  const where = transactionFilterConditions(userId, {
+    currency,
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  });
 
   const rows = await db
     .select({
@@ -170,8 +179,14 @@ export async function getCategoryBreakdown(
   type: OperationType,
   from?: Date,
   currency: Currency = 'RUB',
+  to?: Date,
 ): Promise<CategoryTotal[]> {
-  const where = transactionFilterConditions(userId, { type, currency, ...(from ? { from } : {}) });
+  const where = transactionFilterConditions(userId, {
+    type,
+    currency,
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  });
 
   const rows = await db
     .select({
@@ -187,7 +202,7 @@ export async function getCategoryBreakdown(
 
   return rows.map((row) => ({
     categoryId: row.categoryId,
-    categoryName: row.categoryName ?? 'Без категории',
+    categoryName: row.categoryName ?? tr('edit-message-2'),
     total: row.total,
   }));
 }
@@ -240,6 +255,7 @@ export async function getConvertedStats(
   type: OperationType,
   currency: Currency,
   from?: Date,
+  to?: Date,
 ): Promise<{
   summary: PeriodSummary;
   breakdown: CategoryTotal[];
@@ -260,7 +276,9 @@ export async function getConvertedStats(
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .leftJoin(exchangeRates, eq(transactions.rateAt, exchangeRates.rateAt))
-    .where(transactionFilterConditions(userId, { ...(from ? { from } : {}) }))
+    .where(
+      transactionFilterConditions(userId, { ...(from ? { from } : {}), ...(to ? { to } : {}) }),
+    )
     .groupBy(
       transactions.categoryId,
       categories.name,
@@ -288,7 +306,7 @@ export async function getConvertedStats(
     if (row.type !== type) continue;
     const category = totals.get(row.categoryId) ?? {
       categoryId: row.categoryId,
-      categoryName: row.categoryName ?? 'Без категории',
+      categoryName: row.categoryName ?? tr('edit-message-2'),
       total: 0,
     };
     category.total += total;

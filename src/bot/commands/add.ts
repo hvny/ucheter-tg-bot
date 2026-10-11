@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n/index.js';
 import type { Conversation } from '@grammyjs/conversations';
 import type { Context } from 'grammy';
 import type { Currency, OperationType } from '../../db/schema.js';
@@ -39,7 +40,7 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   await conversation.external(() => registerUser(userId, from.username));
 
   // Шаг 1: тип операции
-  const ref = await promptMessage(ctx, 'Что добавляем?', typeKeyboard());
+  const ref = await promptMessage(ctx, tr('add-message-1'), typeKeyboard());
   const typeResult = await waitCallback(conversation, ref, /^type:(expense|income)$/);
   const type = typeResult.data.split(':')[1] as OperationType;
   const typeLabel = OPERATION_TYPE_LABELS[type];
@@ -49,7 +50,7 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   await editPrompt(
     typeResult.ctx,
     ref,
-    `${typeLabel} — выбери категорию:`,
+    tr('add-message-2', { v0: typeLabel }),
     categoriesKeyboard(categoryList),
   );
 
@@ -58,17 +59,12 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   let categoryName: string;
 
   if (categoryResult.data === CALLBACKS.newCategory) {
-    await editPrompt(categoryResult.ctx, ref, 'Введи название новой категории:', cancelKeyboard());
+    await editPrompt(categoryResult.ctx, ref, tr('add-message-3'), cancelKeyboard());
     for (;;) {
       const { text, ctx: nameCtx } = await waitText(conversation, ref);
       const name = text.slice(0, MAX_CATEGORY_NAME_LENGTH);
       if (!name) {
-        await editPrompt(
-          nameCtx,
-          ref,
-          'Название не может быть пустым. Введи название категории:',
-          cancelKeyboard(),
-        );
+        await editPrompt(nameCtx, ref, tr('add-message-4'), cancelKeyboard());
         continue;
       }
       const category = await conversation.external(() => createCategory(userId, name, type));
@@ -80,14 +76,14 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
     categoryId = Number(categoryResult.data.split(':')[1]);
     const category = await conversation.external(() => getCategoryById(userId, categoryId));
     if (!category || category.type !== type || category.isArchived) {
-      await editPrompt(categoryResult.ctx, ref, 'Категория не найдена. Попробуй ещё раз: /add');
+      await editPrompt(categoryResult.ctx, ref, tr('add-message-5'));
       await conversation.halt();
       return;
     }
     categoryName = category.name;
   }
 
-  await editPrompt(ctx, ref, 'Выбери валюту операции:', currencyKeyboard());
+  await editPrompt(ctx, ref, tr('add-message-6'), currencyKeyboard());
   const currencyResult = await waitCallback(conversation, ref, /^currency:(RUB|USD|EUR|RSD)$/);
   const currency = currencyResult.data.split(':')[1] as Currency;
 
@@ -95,7 +91,7 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   await editPrompt(
     ctx,
     ref,
-    `${typeLabel} · ${categoryName}\n\nВведи сумму (например 250 или 99,90):`,
+    tr('add-message-7', { v0: typeLabel, v1: categoryName }),
     cancelKeyboard(),
   );
   let amount: number;
@@ -109,7 +105,7 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
     await editPrompt(
       amountCtx,
       ref,
-      `${typeLabel} · ${categoryName}\n\nНе похоже на сумму 🤔\nВведи положительное число, например 250 или 99,90:`,
+      tr('add-message-8', { v0: typeLabel, v1: categoryName }),
       cancelKeyboard(),
     );
   }
@@ -118,7 +114,12 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   await editPrompt(
     ctx,
     ref,
-    `${typeLabel} · ${categoryName} · ${formatAmount(amount)} ${currency}\n\nДобавь комментарий или пропусти:`,
+    tr('add-message-9', {
+      v0: typeLabel,
+      v1: categoryName,
+      v2: formatAmount(amount),
+      v3: currency,
+    }),
     skipKeyboard(),
   );
   const commentResult = await waitTextOrCallback(conversation, ref, /^skip$/);
@@ -138,14 +139,13 @@ export async function addOperation(conversation: Conversation, ctx: Context): Pr
   );
 
   const lines = [
-    `✅ ${typeLabel} добавлен`,
+    tr('add-message-10', { v0: typeLabel }),
     '',
     `💰 ${formatAmount(amount)} ${currency} — ${categoryName}`,
     `📅 ${formatDate(transaction.createdAt)}`,
   ];
-  if (!transaction.rateAt)
-    lines.push('Курс пока недоступен: общий пересчёт появится после загрузки курсов.');
-  else if (transaction.rateEstimated) lines.push('Для пересчёта закреплён приблизительный курс.');
+  if (!transaction.rateAt) lines.push(tr('add-message-11'));
+  else if (transaction.rateEstimated) lines.push(tr('add-message-12'));
   if (comment) lines.push(`💬 ${comment}`);
   await editPrompt(commentResult.ctx, ref, lines.join('\n'));
 }
