@@ -123,5 +123,8 @@
   "language-title": "🌐 Choose your interface language:",
   "language-button": "🌐 Language",
   "language-help": "/language — choose language",
-  "language-invalid": "Choose Russian or English."
+  "language-invalid": "Choose Russian or English.",
+  "about-text": "💰 Income and expense tracker\n\nTrack your personal finances right in Telegram.\n\n• Add income and expenses in RUB, USD, EUR and RSD.\n• Organize transactions by category and add comments.\n• Browse your history, edit and delete transactions.\n• Track income, expenses and balance, and view charts by category.\n• See combined statistics in your chosen currency — exchange rates are pinned to transactions.\n• Export transactions to Excel.\n\nAvailable in Russian and English. Change language: /language.",
+  "about-developer": "🌐 Developer website",
+  "about-contact": "✉️ Contact the developer"
 }

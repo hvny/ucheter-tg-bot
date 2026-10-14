@@ -25,6 +25,7 @@ const exchangeRateJob = startExchangeRateJob();
 try {
   await bot.api.setMyCommands([
     { command: 'menu', description: 'Меню' },
+    { command: 'about', description: 'О боте и связь с разработчиком' },
     { command: 'add', description: 'Добавить расход или доход' },
     { command: 'history', description: 'История операций' },
     { command: 'stats', description: 'Статистика' },
@@ -36,6 +37,7 @@ try {
   await bot.api.setMyCommands(
     [
       { command: 'menu', description: 'Menu' },
+      { command: 'about', description: 'About and contact the developer' },
       { command: 'add', description: 'Add expense or income' },
       { command: 'history', description: 'Transaction history' },
       { command: 'stats', description: 'Statistics' },

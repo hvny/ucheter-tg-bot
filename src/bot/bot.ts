@@ -1,3 +1,4 @@
+import { handleAbout } from './commands/about.js';
 import { chooseLanguage, showLanguagePicker } from './commands/language.js';
 import {
   i18n,
@@ -112,6 +113,8 @@ export function createBot(token: string): Bot<BotContext> {
     await withLanguage(language, next);
   });
   bot.use(i18n);
+  // Informational command stays available without cancelling an active conversation.
+  bot.command('about', handleAbout);
   bot.use(conversations());
   bot.use(createConversation(addOperation));
   bot.use(createConversation(addCategory));

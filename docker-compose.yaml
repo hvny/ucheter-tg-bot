@@ -31,6 +31,8 @@ services:
       TG_BOT_TOKEN: ${TG_BOT_TOKEN}
       EXCHANGE_API_KEY: ${EXCHANGE_API_KEY}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEVELOPER_WEBSITE_URL: ${DEVELOPER_WEBSITE_URL:-}
+      DEVELOPER_CONTACT_BOT_URL: ${DEVELOPER_CONTACT_BOT_URL:-}
       DATABASE_URL: postgres://postgres:postgres@db:5432/ucheter-bot
 
 volumes:

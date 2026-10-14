@@ -222,3 +222,16 @@ pm2 restart ucheter-tg-bot
 npm run build
 pm2 restart ucheter-bot
 ```
+
+## О боте и связь с разработчиком
+
+Команда `/about` показывает описание возможностей на выбранном языке, ссылку
+на сайт разработчика и кнопку для связи через Telegram-бота. Задай в `.env`:
+
+```dotenv
+DEVELOPER_WEBSITE_URL=https://your-domain.example
+DEVELOPER_CONTACT_BOT_URL=https://t.me/YourContactBot
+```
+
+Ссылки без настроенного значения не отображаются. Изменения вступают в силу
+после перезапуска бота. Для Docker эти переменные передаются из `.env` через настройки compose.
