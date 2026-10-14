@@ -105,6 +105,8 @@ test('converted totals combine currencies while keeping income and expense separ
     from: () => query,
     leftJoin: () => query,
     where: () => query,
+    orderBy: () => query,
+    limit: async () => [],
     groupBy: async () => rows,
   };
   db.select = (() => query) as unknown as typeof db.select;
@@ -146,6 +148,8 @@ test('different pinned rates remain separate and future rate refresh does not ch
     from: () => query,
     leftJoin: () => query,
     where: () => query,
+    orderBy: () => query,
+    limit: async () => [],
     groupBy: async (...columns: unknown[]) => {
       assert.ok(
         columns.some((c) => c && typeof c === 'object' && 'name' in c && c.name === 'rate_at'),
@@ -204,6 +208,8 @@ test('missing rates are counted and identity conversions still work', async () =
     from: () => query,
     leftJoin: () => query,
     where: () => query,
+    orderBy: () => query,
+    limit: async () => [],
     groupBy: async () => rows,
   };
   db.select = (() => query) as unknown as typeof db.select;

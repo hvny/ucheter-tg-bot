@@ -1,3 +1,4 @@
+import { getDefaultCategoryNames, translateCategory } from './default-categories.js';
 import { and, asc, eq, ilike } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { categories, type Category, type OperationType } from '../../db/schema.js';
@@ -7,7 +8,7 @@ export async function getActiveCategories(
   userId: string,
   type?: OperationType,
 ): Promise<Category[]> {
-  return db
+  const rows = await db
     .select()
     .from(categories)
     .where(
@@ -18,6 +19,8 @@ export async function getActiveCategories(
       ),
     )
     .orderBy(asc(categories.type), asc(categories.name));
+  const names = await getDefaultCategoryNames(userId);
+  return rows.map((category) => translateCategory(category, names));
 }
 
 export async function getCategoryById(userId: string, id: number): Promise<Category | undefined> {
@@ -26,7 +29,7 @@ export async function getCategoryById(userId: string, id: number): Promise<Categ
     .from(categories)
     .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .limit(1);
-  return category;
+  return category ? translateCategory(category, await getDefaultCategoryNames(userId)) : undefined;
 }
 
 /**
@@ -39,6 +42,12 @@ export async function createCategory(
   type: OperationType,
 ): Promise<Category> {
   const trimmed = name.trim();
+  // A translated default label should select the same category rather than create a duplicate.
+  const active = await getActiveCategories(userId, type);
+  const localized = active.find(
+    (category) => category.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (localized) return localized;
 
   const [existing] = await db
     .select()
@@ -52,7 +61,7 @@ export async function createCategory(
       ),
     )
     .limit(1);
-  if (existing) return existing;
+  if (existing) return translateCategory(existing, await getDefaultCategoryNames(userId));
 
   const [created] = await db.insert(categories).values({ userId, name: trimmed, type }).returning();
   return created!;
@@ -65,5 +74,5 @@ export async function archiveCategory(userId: string, id: number): Promise<Categ
     .set({ isArchived: true })
     .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .returning();
-  return archived;
+  return archived ? translateCategory(archived, await getDefaultCategoryNames(userId)) : undefined;
 }

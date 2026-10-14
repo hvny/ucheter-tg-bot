@@ -1,3 +1,4 @@
+import { getDefaultCategoryNames } from './default-categories.js';
 import { tr } from '../i18n/index.js';
 import { getRatesForDate } from './exchange.js';
 import { convertAmount } from '../utils/exchange.js';
@@ -76,7 +77,7 @@ export async function listTransactions(
 ): Promise<{ items: TransactionWithCategory[]; total: number }> {
   const where = transactionFilterConditions(userId, filters);
 
-  const [items, totalRow] = await Promise.all([
+  const [items, totalRow, names] = await Promise.all([
     db
       .select({
         id: transactions.id,
@@ -101,9 +102,16 @@ export async function listTransactions(
       .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(transactions)
       .where(where),
+    getDefaultCategoryNames(userId),
   ]);
 
-  return { items, total: totalRow[0]?.count ?? 0 };
+  return {
+    items: items.map((item) => ({
+      ...item,
+      categoryName: names.get(item.categoryId) ?? item.categoryName,
+    })),
+    total: totalRow[0]?.count ?? 0,
+  };
 }
 
 /** Все операции за период (без пагинации) — для выгрузки в Excel. */
@@ -113,7 +121,7 @@ export async function listAllTransactions(
 ): Promise<TransactionWithCategory[]> {
   const where = transactionFilterConditions(userId, filters);
 
-  return db
+  const items = await db
     .select({
       id: transactions.id,
       userId: transactions.userId,
@@ -131,6 +139,11 @@ export async function listAllTransactions(
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(where)
     .orderBy(transactions.createdAt, transactions.id);
+  const names = await getDefaultCategoryNames(userId);
+  return items.map((item) => ({
+    ...item,
+    categoryName: names.get(item.categoryId) ?? item.categoryName,
+  }));
 }
 
 export interface PeriodSummary {
@@ -200,9 +213,10 @@ export async function getCategoryBreakdown(
     .groupBy(transactions.categoryId, categories.name)
     .orderBy(desc(sql`sum(${transactions.amount})`));
 
+  const names = await getDefaultCategoryNames(userId);
   return rows.map((row) => ({
     categoryId: row.categoryId,
-    categoryName: row.categoryName ?? tr('edit-message-2'),
+    categoryName: names.get(row.categoryId) ?? row.categoryName ?? tr('edit-message-2'),
     total: row.total,
   }));
 }
@@ -289,6 +303,7 @@ export async function getConvertedStats(
       exchangeRates.rates,
     );
   const summary: PeriodSummary = { income: 0, expense: 0 };
+  const names = await getDefaultCategoryNames(userId);
   const totals = new Map<number, CategoryTotal>();
   let missingRates = 0;
   let estimatedRates = 0;
@@ -306,7 +321,7 @@ export async function getConvertedStats(
     if (row.type !== type) continue;
     const category = totals.get(row.categoryId) ?? {
       categoryId: row.categoryId,
-      categoryName: row.categoryName ?? tr('edit-message-2'),
+      categoryName: names.get(row.categoryId) ?? row.categoryName ?? tr('edit-message-2'),
       total: 0,
     };
     category.total += total;
